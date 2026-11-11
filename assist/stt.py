@@ -17,7 +17,7 @@ from typing import Protocol
 import numpy as np
 
 from .llm import AssistError, describe_error
-from .util import STT_PRICES_USD_PER_MIN
+from .util import STT_PRICES_USD_PER_MIN, lang_code
 
 DEFAULT_MODEL = "gpt-transcribe"
 API_URL = "https://api.openai.com/v1/audio/transcriptions"
@@ -78,7 +78,7 @@ class OpenAITranscriber:
         if not self.api_key:
             raise AssistError("Mitschrift nicht eingerichtet")
         self.model = model or os.environ.get("PS_STT_MODEL") or DEFAULT_MODEL
-        self.language = language
+        self.language = lang_code(language)
         self.timeout = timeout
         self._client = client or httpx.AsyncClient(timeout=httpx.Timeout(timeout, connect=5.0),
                                                    limits=httpx.Limits(max_connections=8, max_keepalive_connections=4))
@@ -126,8 +126,9 @@ class OpenAITranscriber:
             pass
 
 
-def from_env() -> Transcriber | None:
-    """``OpenAITranscriber`` bei gesetztem ``OPENAI_API_KEY``, sonst ``None`` (Live-Begleiter bleibt aus)."""
+def from_env(language: str = "de") -> Transcriber | None:
+    """``OpenAITranscriber`` bei gesetztem ``OPENAI_API_KEY``, sonst ``None`` (Live-Begleiter bleibt aus).
+    ``language``: Sprache der Show (zwei Buchstaben)."""
     if not os.environ.get("OPENAI_API_KEY"):
         return None
-    return OpenAITranscriber()
+    return OpenAITranscriber(language=language)

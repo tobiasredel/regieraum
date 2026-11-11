@@ -74,6 +74,7 @@ models/                       Whisper-Modelle
 | `PS_BASE_URL` | öffentliche Adresse der App | `http://localhost:8000` |
 | `PS_HOST_AUTH` | `password` (eingebaute Anmeldung), `proxy` (ein vorgeschalteter Proxy wie tinyauth schützt die Host-Pfade, die App prüft nichts) oder `none` (nur Entwicklung und Tests, warnt beim Start) | `password` |
 | `PS_HOST_PASSWORD` | Passwort des Hosts bei `PS_HOST_AUTH=password`, mindestens 8 Zeichen | leer |
+| `PS_LANG` | Sprache der Oberfläche, solange die Einstellung `ui.language` fehlt: `de` oder `en` | `de` |
 | `PS_JOBS` | `1` startet den Job-Läufer, `0` nicht (Tests) | `1` |
 | `PS_STORAGE` | `local` oder `s3` | `local` |
 | `PS_PUBLIC_BASE_URL` | Basis-URL der veröffentlichten Dateien | bei `local`: `$PS_BASE_URL/public` |
@@ -111,6 +112,33 @@ format:  {labels: {blitzlicht, hauptthema, good, frei, read, watch, listen},
 - Prompts sprechen von Rollen („der Host“, „der Co-Host“). `assist.prompts.show_block` setzt Titel, Hosts, Rufnamen,
   Thema, Ton und den Ablauf einer Folge aus dem Profil ein (`core.assist_show`).
 - Der Rufname des Hosts benennt den Host-Teilnehmer im Studio; der Rufname des Co-Hosts den Dauerlink.
+
+### Sprache (Ergänzung 11.11.2026)
+
+Zwei Sprachen sind unabhängig voneinander.
+
+- **Oberfläche** (`ui.language`, `de` oder `en`; sonst `PS_LANG`, sonst `de`): Alles, was ein Mensch in der Oberfläche liest,
+  auch was der Server formuliert (Fehlermeldungen, Meldungen und Fortschritt der Jobs, Status des Begleiters,
+  Benachrichtigungen, Anmeldung, Standardnamen der Abschnittsarten, Show-Titel „Mein Podcast“, Name des Dauerlinks).
+  Deutsch ist die Quellsprache: Der deutsche Text ist der Schlüssel (`app/i18n.py`, `tr(lang, text, **params)`).
+  Wörterbücher liegen unter `app/static/i18n/en.<bereich>.json` (deutscher Text → englischer Text), der Server nutzt
+  `en.server.json`. `ApiError(status, code, "Folge {id} nicht gefunden", id=…)` trägt den Schlüssel samt Platzhaltern;
+  `str(exc)` bleibt der fertige deutsche Text, die Antwort wird in der Sprache der Oberfläche formuliert. Meldungen, die
+  in der Datenbank stehen (Jobs, Warnungen der Verarbeitung, Fehler der Recherche), bleiben deutsch gespeichert und
+  werden beim Ausliefern übersetzt, damit ein Sprachwechsel sofort wirkt. Meldungen mit Zahlen oder Namen kennen die
+  Muster: Jeder Wörterbucheintrag mit Platzhaltern (`{n}`) gilt zugleich als Muster; findet `tr` keinen exakten Treffer,
+  passt es den Text gegen diese Muster. Ein Platzhalter `{detail}` steht für eine eingebettete Meldung und wird selbst
+  übersetzt. Log-Ausgaben, Protokollwerte und Ausnahmen, die kein Mensch sieht, bleiben deutsch. Gespeicherte Werte
+  (Namen der Abschnittsarten, Titel) werden nie übersetzt; Standardwerte gelten in der Sprache der Oberfläche, solange
+  nichts gespeichert ist.
+- **Inhalte** (`show.language`, z. B. `de`, `de-DE`, `en`, `en-GB`; die ersten zwei Buchstaben zählen, Standard `de`):
+  Dossiers, Karten des Begleiters, Shownotes, Live-Mitschrift und Transkript folgen der Sprache der Show. Die Prompts sind
+  deutsch geschrieben, verlangen aber Ausgabe in dieser Sprache mit dem dort üblichen Zahlenformat und den üblichen
+  Anführungszeichen (`assist.prompts.localize`; `show_block` nennt die Sprache ausdrücklich). Die Karte einer Korrektur
+  trägt `art: korrektur`; ihr Text beginnt mit „Korrektur:“ bzw. dem Wort der Sprache („Correction:“). Die Muster für
+  Halluzinationen der Mitschrift, Wissenslücken und Zahlwörter gibt es für Deutsch und Englisch, für andere Sprachen
+  gelten beide. Der Server gibt die Sprache an die Live-Sitzung (`LiveSession(language=…)`, Mitschrift) und über das
+  Manifest (`language`) an die Pipeline (Transkript, `transcript.json` und VTT); fehlt sie, gilt `de`.
 
 ## 3. Zugang und Rollen
 

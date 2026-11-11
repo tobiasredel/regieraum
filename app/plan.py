@@ -8,7 +8,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
-from . import core, util
+from . import core, i18n, util
 from .auth import host_guard
 from .errors import ApiError
 
@@ -26,11 +26,14 @@ def mark_stale_research(db) -> None:
     db.run("UPDATE segments SET status='failed', error=?, updated_at=? WHERE status='researching'", (RESTART_NOTE, util.now_ms()))
 
 
-def segment_public(seg: dict, progress: dict | None = None) -> dict:
+def segment_public(seg: dict, progress: dict | None = None, lang: str = "de") -> dict:
+    """Abschnitt für die Oberfläche. Fehler und Fortschrittsmeldungen werden in `lang` übersetzt (gespeichert ist Deutsch)."""
     out = {k: seg[k] for k in ("id", "episode_id", "sort", "kind", "title", "input", "good_type", "status", "dossier",
                                "notes", "visited_at", "updated_at", "error")}
+    if out["error"]:
+        out["error"] = i18n.tr(lang, out["error"])
     if seg["status"] == "researching" and progress:
-        out["progress"], out["message"] = progress.get("progress", 0), progress.get("message", "")
+        out["progress"], out["message"] = progress.get("progress", 0), i18n.tr(lang, progress.get("message", ""))
     return out
 
 
@@ -140,7 +143,8 @@ def _episode_or_404(request: Request, episode_id: str) -> dict:
 
 
 def _out(request: Request, seg: dict) -> dict:
-    return segment_public(seg, request.app.state.researcher.progress.get(seg["id"]))
+    return segment_public(seg, request.app.state.researcher.progress.get(seg["id"]),
+                          i18n.ui_lang(request.app.state.db))
 
 
 def _renumber(c, episode_id: str, ids: list[str]) -> None:

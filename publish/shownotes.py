@@ -64,7 +64,7 @@ für eine neue Folge, ausschließlich auf Grundlage des Transkripts.
 Über die Show:
 {description}
 
-Ton der Show: {tone}. Sprache: Deutsch. Die Vorschläge dürfen diesen Ton aufnehmen, \
+Ton der Show: {tone}. Sprache: {language}. Die Vorschläge dürfen diesen Ton aufnehmen, \
 etwa durch Zuspitzung, Wortspiel oder trockenen Humor.
 
 Strenge Regeln:
@@ -86,6 +86,29 @@ danach, nur wenn im Transkript genannt, erwähnte Bücher, Artikel, Personen ode
 ein prägnanter Titel mit höchstens 45 Zeichen. Die Zeiten der Ereignisse sind ungefähr (Schnitte können sie verschieben); \
 ordne sie dem Gesprächsabschnitt zu, der dort inhaltlich beginnt. Hat das Gespräch an der Stelle kein klares Thema, lass das Ereignis weg. \
 Verwende nur die event_id-Werte aus der Liste."""
+
+
+LANG_NAMES = {"de": "Deutsch", "en": "Englisch", "fr": "Französisch", "es": "Spanisch", "it": "Italienisch",
+              "nl": "Niederländisch", "pt": "Portugiesisch", "pl": "Polnisch", "tr": "Türkisch", "sv": "Schwedisch",
+              "da": "Dänisch", "nb": "Norwegisch", "no": "Norwegisch", "fi": "Finnisch", "cs": "Tschechisch",
+              "ru": "Russisch", "uk": "Ukrainisch", "ja": "Japanisch", "zh": "Chinesisch", "ko": "Koreanisch",
+              "ar": "Arabisch", "el": "Griechisch", "hu": "Ungarisch", "ro": "Rumänisch"}
+
+
+def _lang_code(value: Any) -> str:
+    """Zweibuchstabiger Sprachcode der Show („de“, „en-GB“ → „en“); ohne Angabe Deutsch."""
+    m = re.match(r"\s*([A-Za-z]{2})(?![A-Za-z])", str(value or ""))
+    return m.group(1).lower() if m else "de"
+
+
+def _language_phrase(lang: str) -> str:
+    """Ausgabesprache samt üblichem Zahlenformat und üblichen Anführungszeichen; Deutsch bleibt „Deutsch“."""
+    if lang == "de":
+        return "Deutsch"
+    if lang == "en":
+        return "Englisch (Titel, Zusammenfassung, Shownotes und Kapitel; Zahlen im englischen Format 1,234.5, Anführungszeichen “so”)"
+    name = LANG_NAMES.get(lang, f"die Sprache „{lang}“")
+    return f"{name} (Titel, Zusammenfassung, Shownotes und Kapitel; Zahlen und Anführungszeichen wie dort üblich)"
 
 
 def _fmt_time(ms: int) -> str:
@@ -128,11 +151,13 @@ def build_prompt(transcript: Any, show: Any, chapters: Any, previous_titles: Ite
     """-> (system, user). Getrennt, damit Tests den Inhalt prüfen können. `plan`: Sendeplan der Folge
     (`[{kind, title, input, good_type, dossier}]`), liefert Quellen und Good Read."""
     if isinstance(show, Show):
-        title, desc, tone = show.title, show.description, ""
+        title, desc, tone, language = show.title, show.description, "", show.language
     else:
         title, desc, tone = (show or {}).get("title", ""), (show or {}).get("description", ""), (show or {}).get("tone", "")
+        language = (show or {}).get("language")
+    lang = _lang_code(language)
     system = SYSTEM.format(title=title or "Podcast", description=desc or "(keine Beschreibung hinterlegt)",
-                           tone=tone or "sachlich und zugänglich")
+                           tone=tone or "sachlich und zugänglich", language=_language_phrase(lang))
     prev = [t for t in (previous_titles or []) if t][:60]
     chs = _chapters_for_prompt(chapters)
     parts = []

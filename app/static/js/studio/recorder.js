@@ -14,6 +14,7 @@
 
 const V = new URL(import.meta.url).search;
 const { api, ApiError, sleep } = await import(`./util.js${V}`);
+const { t } = await import(`../i18n.js${V}`);
 
 const CHUNK_SECONDS = 2;
 const PREROLL_MAX_S = 60;          // SPEC: höchstens 60 s Vorlauf
@@ -285,7 +286,7 @@ export class Recorder extends EventTarget {
   storeError(e) {
     if (!this.storeFailed) {
       this.storeFailed = true;
-      this.emit("store-error", { message: "Lokale Sicherung nicht möglich. Die Aufnahme läuft, ist bei einem Neuladen aber nicht geschützt.", error: String(e) });
+      this.emit("store-error", { message: t("Lokale Sicherung nicht möglich. Die Aufnahme läuft, ist bei einem Neuladen aber nicht geschützt."), error: String(e) });
     }
   }
 
@@ -440,7 +441,7 @@ export class Recorder extends EventTarget {
       if (!ok) {
         let code = "";
         try { code = ((await r.json()).error || {}).code || ""; } catch { /* egal */ }
-        if (status === 401) { this.setFatal(new ApiError(401, "unauthorized", "Zugang abgelaufen oder ungültig")); }
+        if (status === 401) { this.setFatal(new ApiError(401, "unauthorized", t("Zugang abgelaufen oder ungültig"))); }
         // nicht wiederholbar: Spur gehört uns nicht, existiert nicht mehr, ist zu, Chunk kaputt
         if ([400, 403, 404, 409, 413, 422].includes(status)) { drop = true; console.warn("Chunk verworfen", T.id, it.seq, status, code); }
       }

@@ -223,7 +223,7 @@ async def research_async(segment: dict, show: dict | None = None, previous_title
     links = extract_urls(inp)
     depth_text = prompts.PREP_DEPTH["good_empty" if good_empty else kind]
     system = [
-        {"type": "text", "text": prompts.PREP_SYSTEM, "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": prompts.prep_system(show), "cache_control": {"type": "ephemeral"}},
         {"type": "text", "text": depth_text},
     ]
     today = f"{now.strftime('%Y-%m-%d')}, {WEEKDAYS[now.weekday()]}"
@@ -274,7 +274,7 @@ async def research_async(segment: dict, show: dict | None = None, previous_title
                                                        "cache_creation_input_tokens")},
     }
     if not dossier["fakten"] and not dossier.get("werk") and not dossier.get("kandidaten"):
-        dossier["hinweis"] = "Keine belegbaren Fakten gefunden."
+        dossier["hinweis"] = prompts.NO_FACTS.get(prompts.show_lang(show), prompts.NO_FACTS["en"])
     _call_progress(on_progress, 1.0, "Dossier fertig")
     return dossier
 

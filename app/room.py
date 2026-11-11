@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 
 from fastapi import WebSocket, WebSocketDisconnect
 
-from . import core, util
+from . import core, i18n, util
 from .companion import Companion
 from .errors import ApiError
 
@@ -72,8 +72,13 @@ class Room:
             self.companion.set_plan(episode_id)
             await self.send_room()
 
-    async def error(self, conn: Conn, code: str, message: str) -> None:
-        await self._send(conn, {"type": "error", "code": code, "message": message})
+    @property
+    def lang(self) -> str:
+        return i18n.ui_lang(self.db)
+
+    async def error(self, conn: Conn, code: str, message: str, **params) -> None:
+        """Fehlermeldung an eine Verbindung, in der Sprache der Oberfläche (`message` ist der deutsche Schlüssel)."""
+        await self._send(conn, {"type": "error", "code": code, "message": i18n.tr(self.lang, message, **params)})
 
     # --- Zustand ---------------------------------------------------------
     @property
@@ -163,12 +168,12 @@ class Room:
         p = core.participant_by_token(self.db, ws.query_params.get("token"))
         if p is None:
             await ws.send_text(json.dumps({"type": "error", "code": "unauthorized",
-                                           "message": "Zugang abgelaufen oder ungültig. Bitte den Einladungslink erneut öffnen"}))
+                                           "message": i18n.tr(self.lang, "Zugang abgelaufen oder ungültig. Bitte den Einladungslink erneut öffnen")}))
             await ws.close(code=4401)
             return
         if p["id"] not in self.conns and len(self.conns) >= MAX_PEERS:
             await ws.send_text(json.dumps({"type": "error", "code": "room_full",
-                                           "message": "Das Studio ist voll. Es sind höchstens vier Teilnehmer gleichzeitig möglich"}))
+                                           "message": i18n.tr(self.lang, "Das Studio ist voll. Es sind höchstens vier Teilnehmer gleichzeitig möglich")}))
             await ws.close(code=4429)
             return
         old = self.conns.get(p["id"])
@@ -199,7 +204,7 @@ class Room:
                 try:
                     await self.handle(conn, msg)
                 except ApiError as e:
-                    await self.error(conn, e.code, e.message)
+                    await self.error(conn, e.code, e.template, **e.params)
                 except Exception:  # noqa: BLE001
                     log.exception("Fehler bei %s", msg.get("type"))
                     await self.error(conn, "internal", "Interner Fehler")
@@ -257,7 +262,7 @@ class Room:
         elif t.startswith("assist."):
             await self.assist(t, msg)
         else:
-            await self.error(conn, "unknown_type", f"Unbekannter Nachrichtentyp: {t}")
+            await self.error(conn, "unknown_type", "Unbekannter Nachrichtentyp: {type}", type=t)
 
     async def _meter(self, conn: Conn, msg: dict) -> None:
         clip = bool(msg.get("clip"))
@@ -400,8 +405,9 @@ class Room:
     async def marker(self, label: str) -> None:
         ep = self._recording()
         at = util.now_ms()
-        core.add_event(self.db, ep["id"], "marker", at, payload={"label": label or "Marker"})
-        await self.broadcast({"type": "marker", "label": label or "Marker", "at": at - ep["rec_start_server_ms"]})
+        label = label or i18n.tr(self.lang, "Marker")
+        core.add_event(self.db, ep["id"], "marker", at, payload={"label": label})
+        await self.broadcast({"type": "marker", "label": label, "at": at - ep["rec_start_server_ms"]})
 
     # --- Live-Begleiter (nur Host) ---------------------------------------------------------------------------
     async def set_segment(self, episode_id: str, segment_id: str | None) -> None:
@@ -439,4 +445,4 @@ class Room:
                 raise ApiError(404, "card_not_found", "Karte nicht gefunden")
             await self.send_hosts({"type": "assist.card", **card})
         else:
-            raise ApiError(400, "unknown_type", f"Unbekannter Nachrichtentyp: {t}")
+            raise ApiError(400, "unknown_type", "Unbekannter Nachrichtentyp: {type}", type=t)

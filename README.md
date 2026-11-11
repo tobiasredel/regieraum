@@ -4,7 +4,7 @@ A self-hosted studio for conversation podcasts with a fixed running order. It co
 to the published episode: research dossiers for each segment, a browser studio that records every participant
 locally, a live companion that follows the conversation, an audio pipeline on your own server, and your own RSS feed.
 
-The interface is German. "Regieraum" is the German word for a broadcast control room.
+The interface is available in German and English. "Regieraum" is the German word for a broadcast control room.
 
 ![The studio while recording: running order, video, companion cards and the dossier of the current segment](docs/screenshots/sendemodus.png)
 
@@ -36,7 +36,11 @@ The interface is German. "Regieraum" is the German word for a broadcast control 
 
 ## What to know before you start
 
-- German interface and German prompts. There is no translation layer yet.
+- Two languages are independent of each other. The **interface** is German or English (Einstellungen → Sprache der
+  Oberfläche / Settings → Interface language, or `PS_LANG=en` for a new installation). The **content** the app writes,
+  that is dossiers, companion cards, show notes and transcripts, follows the language of the show (`Sprache` /
+  `Language` in the show data, for example `de` or `en`). German and English are tested; other show languages
+  depend on what the models can do. The prompts themselves are written in German.
 - Built for two regular hosts plus occasional guests. Up to four participants talk over a WebRTC mesh.
 - One host account. The host signs in with a password; everyone else joins through invitation links.
 - The Docker image is x86_64 only (the DeepFilterNet binary).
@@ -60,15 +64,16 @@ cp .env.example .env        # set PS_BASE_URL and PS_HOST_PASSWORD (at least 8 c
 docker compose up -d --build
 ```
 
-Open `http://localhost:8000`, sign in, and then:
+Open `http://localhost:8000`, sign in, and then (page names as in the English interface; set `PS_LANG=en` in `.env`
+before the first start, or switch the language under Einstellungen):
 
-1. **Einstellungen**: enter the show data and cover, then under "Sendung und Format" the names of the hosts, the
-   topic and tone of the show, the names of your segment types and the running order of a new episode.
+1. **Settings**: enter the show data and cover, then under "Show and format" the names of the hosts, the topic and
+   tone of the show, the names of your segment types and the running order of a new episode.
 2. **Soundboard**: upload jingles and assign keys. A jingle can be tied to a segment type; playing it then advances
    the running order.
-3. **Einstellungen → Einladungen**: copy the permanent link for your co-host.
-4. **Vorbereitung**: fill the running order of the next episode and start the research.
-5. **Studio**: record. Afterwards the episode appears under **Folgen** for review and publishing.
+3. **Settings → Invitations**: copy the permanent link for your co-host.
+4. **Preparation**: fill the running order of the next episode and start the research.
+5. **Studio**: record. Afterwards the episode appears under **Episodes** for review and publishing.
 
 ### Behind a reverse proxy
 
@@ -86,7 +91,7 @@ fails, and only for the live conversation; recordings are always uploaded direct
 
 ### Moving an existing show
 
-Under **Einstellungen → Import** enter the address of your current feed. The importer copies show data, cover and all
+Under **Settings → Import** enter the address of your current feed. The importer copies show data, cover and all
 episodes with unchanged GUIDs. Check the new feed, then set the redirect at your old host.
 
 ## Configuration

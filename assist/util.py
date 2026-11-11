@@ -25,6 +25,12 @@ STT_PRICES_USD_PER_MIN = {
 }
 
 
+def lang_code(value) -> str:
+    """Zweibuchstabiger Sprachcode aus `show.language` („de“, „de-DE“, „en_GB“ …); sonst „de“."""
+    m = re.match(r"\s*([A-Za-z]{2})(?![A-Za-z])", str(value or ""))
+    return m.group(1).lower() if m else "de"
+
+
 def new_id() -> str:
     return "".join(secrets.choice(_ID_ALPHABET) for _ in range(12))
 

@@ -17,16 +17,85 @@ from __future__ import annotations
 
 import json
 
+from .util import lang_code
+
 DEFAULT_LABELS = {"blitzlicht": "Kurzthema", "hauptthema": "Hauptthema", "good": "Empfehlung", "frei": "Freier Abschnitt",
                   "read": "Lesetipp", "watch": "Sehtipp", "listen": "Hörtipp"}
+DEFAULT_LABELS_EN = {"blitzlicht": "Short topic", "hauptthema": "Main topic", "good": "Recommendation",
+                     "frei": "Free segment", "read": "Reading tip", "watch": "Watching tip", "listen": "Listening tip"}
+
+# Sprache der Show: Die Prompts sind deutsch geschrieben, verlangen die Ausgabe aber in der Sprache der Show
+# (`show["language"]`, zweibuchstabig, Standard „de“). Deutsch bleibt Wort für Wort, wie es war.
+LANG_NAMES = {"de": "Deutsch", "en": "Englisch", "fr": "Französisch", "es": "Spanisch", "it": "Italienisch",
+              "nl": "Niederländisch", "pt": "Portugiesisch", "pl": "Polnisch", "tr": "Türkisch", "sv": "Schwedisch",
+              "da": "Dänisch", "nb": "Norwegisch", "no": "Norwegisch", "fi": "Finnisch", "cs": "Tschechisch",
+              "ru": "Russisch", "uk": "Ukrainisch", "ja": "Japanisch", "zh": "Chinesisch", "ko": "Koreanisch",
+              "ar": "Arabisch", "el": "Griechisch", "hu": "Ungarisch", "ro": "Rumänisch"}
+CORRECTION_WORD = {"de": "Korrektur", "en": "Correction"}
+NOTHING_FOUND = {"de": "Nichts Belastbares gefunden", "en": "Nothing reliable found"}
+NO_FACTS = {"de": "Keine belegbaren Fakten gefunden.", "en": "No verifiable facts found."}
+
+
+def show_lang(show: dict | None) -> str:
+    return lang_code((show or {}).get("language"))
+
+
+def lang_name(lang: str) -> str:
+    return LANG_NAMES.get(lang, f"die Sprache „{lang}“")
+
+
+def correction_word(lang: str) -> str:
+    """Anfang einer Korrektur-Karte (`art: korrektur`) in der Sprache der Show; andere Sprachen: Englisch."""
+    return CORRECTION_WORD.get(lang, CORRECTION_WORD["en"])
+
+
+def nothing_found(lang: str) -> str:
+    return NOTHING_FOUND.get(lang, NOTHING_FOUND["en"])
+
+
+def default_labels(lang: str) -> dict:
+    return DEFAULT_LABELS if lang == "de" else DEFAULT_LABELS_EN
+
+
+def _out_long(lang: str) -> str:
+    if lang == "en":
+        return "Alles auf Englisch, Zahlen im englischen Format (1,234.5), Anführungszeichen “so”."
+    return f"Alles auf {lang_name(lang)}, Zahlen und Anführungszeichen so, wie es dort üblich ist."
+
+
+def _out_short(lang: str) -> str:
+    if lang == "en":
+        return "Englisch, Zahlen im englischen Format."
+    return f"{lang_name(lang)}, Zahlen im dort üblichen Format."
+
+
+def localize(text: str, lang: str) -> str:
+    """Prompt-Text für die Sprache der Show: Ausgabesprache, Zahlenformat und das feste Wort der Korrektur-Karte."""
+    if lang == "de":
+        return text
+    word = correction_word(lang)
+    text = (text.replace("Alles auf Deutsch, Zahlen im deutschen Format (1.234,5), Anführungszeichen „so“.", _out_long(lang))
+            .replace("- Deutsch, Zahlen im deutschen Format.", "- " + _out_short(lang))
+            .replace("einen deutschsprachigen Podcast", "einen Podcast" if lang != "en" else "einen englischsprachigen Podcast")
+            .replace("(Text beginnt mit „Korrektur:“)", f"(Text beginnt mit „{word}:“ bzw. dem entsprechenden Wort in der Sprache der Show)")
+            .replace("„Korrektur: 203,7 Mrd. statt 150 Mrd., inkl. Sondervermögen“", f"„{word}: 203,7 Mrd. statt 150 Mrd., inkl. Sondervermögen“")
+            .replace("Bei Korrektur: „Korrektur: … statt …“.", f"Bei Korrektur: „{word}: … statt …“.")
+            .replace("„Korrektur:“", f"„{word}:“")
+            .replace("„Korrektur: Laut UBA", f"„{word}: Laut UBA")
+            .replace("{\"kind\": \"fakt\", \"text\": \"Korrektur:", "{\"kind\": \"fakt\", \"text\": \"" + word + ":")
+            .replace("- Findest Du nichts Belastbares: `text` = „Nichts Belastbares gefunden: …“ mit dem Begriff, `quelle_url` null.",
+                     f"- Findest Du nichts Belastbares: `text` = „{nothing_found(lang)}: …“ mit dem Begriff, `quelle_url` null.")
+            .replace("- Deutsch, Zahlen im deutschen Format.", "- " + _out_short(lang)))
+    return text
 DEFAULT_PLAN = ["blitzlicht", "blitzlicht", "blitzlicht", "hauptthema", "good:read"]
 GOOD_MEDIUM = {"read": "Buch oder Text", "watch": "Film, Serie, Video", "listen": "Podcast, Musik, Hörbuch"}
 
 
 def labels_of(show: dict | None) -> dict:
-    """Namen der Abschnittsarten dieser Show (Einstellungen `format.labels`), ergänzt um die Standardnamen."""
+    """Namen der Abschnittsarten dieser Show (Einstellungen `format.labels`), ergänzt um die Standardnamen in der
+    Sprache der Show."""
     fmt = (show or {}).get("format") or {}
-    return {**DEFAULT_LABELS, **{k: v for k, v in (fmt.get("labels") or {}).items() if v}}
+    return {**default_labels(show_lang(show)), **{k: v for k, v in (fmt.get("labels") or {}).items() if v}}
 
 
 def kind_label(show: dict | None, kind: str | None, good_type: str | None = None, medium: bool = False) -> str:
@@ -62,6 +131,8 @@ def show_block(show: dict | None) -> str:
     """Show-Profil für jeden Prompt: wer spricht, worüber, in welchem Ton und in welchem Ablauf."""
     s = show or {}
     lines = [f"Show: „{s.get('title') or 'Podcast'}“" + (f", Hosts: {s['hosts']}." if s.get("hosts") else ".")]
+    lang = show_lang(s)
+    lines.append(f"Sprache der Show: {lang_name(lang)}. Alles, was Du für die Show schreibst, steht in dieser Sprache.")
     if s.get("host_name"):
         lines.append(f"Der Host, der die App bedient und die Karten liest, heißt {s['host_name']}."
                      + (f" Sein Co-Host am Mikrofon heißt {s['cohost_name']}." if s.get("cohost_name") else ""))
@@ -173,6 +244,25 @@ falls angegeben. Je Kandidat in `kandidaten`: `titel`, `urheber`, `typ` (read, w
 die Du gesehen hast), `warum` (ein Satz: Bezug zum Hauptthema und was man davon hat). `werk` ist null. `lage` in einem \
 Satz: worauf sich die Auswahl bezieht. Übrige Felder dürfen leer bleiben, `begriffe` mit den Titeln und Urhebern.""",
 }
+
+
+def prep_system(show: dict | None) -> str:
+    return localize(PREP_SYSTEM, show_lang(show))
+
+
+def live_system(show: dict | None) -> str:
+    return localize(LIVE_SYSTEM, show_lang(show))
+
+
+def lookup_system(show: dict | None) -> str:
+    return localize(LOOKUP_SYSTEM, show_lang(show))
+
+
+def summary_system(show: dict | None) -> str:
+    lang = show_lang(show)
+    if lang == "de":
+        return SUMMARY_SYSTEM
+    return SUMMARY_SYSTEM.rstrip("\n") + f"\n- Sprache der Kurzfassung: {lang_name(lang)} (die Sprache der Show)\n"
 
 
 def prep_user_message(segment: dict, show: dict | None, previous_titles: list[str] | None,
@@ -379,7 +469,7 @@ def live_user_message(*, mode: str, current: dict | None, segment_elapsed_ms: fl
     ]
     if mode == "check":
         parts.append(f"Mitschrift der letzten anderthalb Minuten (automatisch, kann Hörfehler enthalten; Namen siehe Begriffe):\n{render_lines(lines)}")
-        parts.append("Zahlen-Prüfung und Wissenslücke: In den letzten Sekunden wurde eine Zahl genannt, nach einer "
+        parts.append(localize("Zahlen-Prüfung und Wissenslücke: In den letzten Sekunden wurde eine Zahl genannt, nach einer "
                      "Tatsache gefragt oder jemand war unsicher. Prüfe genau zwei Dinge.\n"
                      "1. Widerspricht eine gerade genannte Zahl oder Tatsache dem Dossier und wurde noch nicht "
                      "korrigiert? Dann eine `fakt`-Karte, deren Text mit „Korrektur:“ beginnt (`art: korrektur`).\n"
@@ -389,7 +479,7 @@ def live_user_message(*, mode: str, current: dict | None, segment_elapsed_ms: fl
                      "ändert sie sich schnell: `karte: null` und `nachschlagen` mit dem Suchbegriff.\n"
                      "Sonst, und bei Meinungen, rhetorischen Fragen oder Zweifel, ob es eine echte Lücke ist: "
                      "`karte: null`, `nachschlagen: null`. Keine Anschlussfragen, keine Stichworte. "
-                     "`genannt` bleibt in dieser Prüfung leer.")
+                     "`genannt` bleibt in dieser Prüfung leer.", show_lang(show)))
     elif mode == "tick":
         parts.append(f"Mitschrift der letzten vier Minuten (automatisch, kann Hörfehler enthalten; Namen siehe Begriffe):\n{render_lines(lines)}")
         parts.append("Entscheide jetzt: Gibt es genau eine Karte, die dem Host in diesem Moment wirklich hilft? "

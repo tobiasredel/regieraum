@@ -1,14 +1,24 @@
 // Folgenliste: Nummer, Titel, Status als Text, Dauer, Datum; laufende Verarbeitung mit Fortschritt (Polling).
-import { $, api, clear, fmtDate, fmtDateTime, fmtDuration, h, errorText, poll, progressBar, statusClass, statusText } from "./common.js";
+import { $, api, clear, fmtDate, fmtDateTime, fmtDuration, h, errorText, poll, progressBar, rich, statusClass, statusText, t } from "./common.js";
 
 const root = $("#app");
-const JOB_LABEL = { process: "Verarbeitung", remix: "Neu mischen", publish: "Veröffentlichung", unpublish: "Zurückziehen", suggest: "Vorschlag", transcribe: "Transkript" };
+function jobLabel(kind) {
+  switch (kind) {
+    case "process": return t("Verarbeitung");
+    case "remix": return t("Neu mischen");
+    case "publish": return t("Veröffentlichung");
+    case "unpublish": return t("Zurückziehen");
+    case "suggest": return t("Vorschlag");
+    case "transcribe": return t("Transkript");
+    default: return t("Aufgabe");
+  }
+}
 let stop = null;
 
 function dateText(ep) {
-  if (ep.status === "published" && ep.published_at) return `veröffentlicht ${fmtDate(ep.published_at)}`;
-  if (ep.status === "scheduled" && ep.publish_at) return `geplant für ${fmtDateTime(ep.publish_at)}`;
-  return ep.created_at ? `angelegt ${fmtDate(ep.created_at)}` : "";
+  if (ep.status === "published" && ep.published_at) return t("veröffentlicht {date}", { date: fmtDate(ep.published_at) });
+  if (ep.status === "scheduled" && ep.publish_at) return t("geplant für {date}", { date: fmtDateTime(ep.publish_at) });
+  return ep.created_at ? t("angelegt {date}", { date: fmtDate(ep.created_at) }) : "";
 }
 
 function row(ep) {
@@ -22,20 +32,20 @@ function row(ep) {
     if (i) meta.append(h("span", { class: "m-sep", "aria-hidden": "true" }, "·"));
     meta.append(p);
   });
-  if (ep.source === "imported") meta.append(h("span", { class: "m-sep", "aria-hidden": "true" }, "·"), h("span", null, "importiert"));
+  if (ep.source === "imported") meta.append(h("span", { class: "m-sep", "aria-hidden": "true" }, "·"), h("span", null, t("importiert")));
   const text = h("div", { class: "m-ep-text" },
-    h("strong", { class: "m-ep-title" }, ep.title || "Ohne Titel"), meta);
+    h("strong", { class: "m-ep-title" }, ep.title || t("Ohne Titel")), meta);
   if (ep.job) {
     const j = ep.job;
-    const label = JOB_LABEL[j.kind] || "Aufgabe";
-    const state = j.status === "queued" ? "wartet" : j.message || "läuft";
+    const label = jobLabel(j.kind);
+    const state = j.status === "queued" ? t("wartet") : j.message || t("läuft");
     text.append(
       h("div", { class: "m-job" },
-        h("p", { class: "tr-small" }, `${label}: ${state}${j.status === "running" ? `, ${Math.round((j.progress || 0) * 100)} %` : ""}`),
-        j.status === "running" ? progressBar(j.progress, `${label}, Fortschritt`) : null));
+        h("p", { class: "tr-small" }, j.status === "running" ? t("{label}: {state}, {pct} %", { label, state, pct: Math.round((j.progress || 0) * 100) }) : t("{label}: {state}", { label, state })),
+        j.status === "running" ? progressBar(j.progress, t("{label}, Fortschritt", { label })) : null));
   }
   const no = h("span", { class: "m-ep-no" }, ep.number != null ? String(ep.number) : "–");
-  no.setAttribute("aria-label", ep.number != null ? `Folge ${ep.number}` : "ohne Nummer");
+  no.setAttribute("aria-label", ep.number != null ? t("Folge {n}", { n: ep.number }) : t("ohne Nummer"));
   return h("li", null, h("a", { class: "tr-item m-ep", href: `/episodes/${encodeURIComponent(ep.id)}` }, no, text));
 }
 
@@ -43,9 +53,11 @@ function render(items) {
   clear(root);
   if (!items.length) {
     root.append(h("div", { class: "m-empty" },
-      h("p", null, "Noch keine Folgen"),
-      h("p", { class: "tr-small" }, "Aufgenommen wird im ", h("a", { href: "/studio" }, "Studio"),
-        ". Die bisherigen Folgen lassen sich unter ", h("a", { href: "/settings#import" }, "Einstellungen"), " aus dem alten Feed übernehmen.")));
+      h("p", null, t("Noch keine Folgen")),
+      h("p", { class: "tr-small" }, rich(t("Aufgenommen wird im {studio}. Die bisherigen Folgen lassen sich unter {settings} aus dem alten Feed übernehmen."), {
+        studio: h("a", { href: "/studio" }, t("Studio")),
+        settings: h("a", { href: "/settings#import" }, t("Einstellungen")),
+      }))));
     return;
   }
   const list = h("ul", { class: "tr-list" });
@@ -65,7 +77,7 @@ async function start() {
     if (busy) stop = poll(load, 3000);
   } catch (e) {
     clear(root);
-    root.append(h("p", { class: "tr-error", role: "alert" }, `Die Liste konnte nicht geladen werden. ${errorText(e)}`));
+    root.append(h("p", { class: "tr-error", role: "alert" }, t("Die Liste konnte nicht geladen werden. {message}", { message: errorText(e) })));
   }
 }
 start();

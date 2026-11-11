@@ -36,19 +36,23 @@ _version_at = time.monotonic()
 
 
 def render(request: Request, name: str, title: str, **ctx) -> HTMLResponse:
+    from . import i18n
+
+    lang = i18n.ui_lang(getattr(request.app.state, "db", None))
     try:
-        show_title = request.app.state.db.get_setting("show", {}).get("title") or "Mein Podcast"
+        show_title = request.app.state.db.get_setting("show", {}).get("title") or i18n.tr(lang, "Mein Podcast")
     except Exception:  # noqa: BLE001 - die Seite soll auch ohne Datenbank einen Titel haben
-        show_title = "Mein Podcast"
+        show_title = i18n.tr(lang, "Mein Podcast")
     context = {"request": request, "v": asset_version(), "base_url": request.app.state.cfg.base_url,
-               "show_title": show_title, "host_auth": request.app.state.cfg.host_auth, **ctx}
+               "show_title": show_title, "host_auth": request.app.state.cfg.host_auth,
+               "lang": lang, "t": lambda text, **kw: i18n.tr(lang, text, **kw), **ctx}
     if (TEMPLATES_DIR / name).exists():
         return templates.TemplateResponse(request, name, context)
-    body = (f'<!doctype html><html lang="de"><head><meta charset="utf-8">'
-            f'<meta name="viewport" content="width=device-width, initial-scale=1"><title>{html.escape(title)}</title>'
+    body = (f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8">'
+            f'<meta name="viewport" content="width=device-width, initial-scale=1"><title>{html.escape(i18n.tr(lang, title))}</title>'
             f'<link rel="stylesheet" href="/static/design/app-basis.css?v={asset_version()}"></head>'
-            f'<body><main style="max-width:40rem;margin:4rem auto;padding:0 1rem"><h1>{html.escape(title)}</h1>'
-            f'<p>Diese Seite ist noch nicht gebaut.</p></main></body></html>')
+            f'<body><main style="max-width:40rem;margin:4rem auto;padding:0 1rem"><h1>{html.escape(i18n.tr(lang, title))}</h1>'
+            f'<p>{html.escape(i18n.tr(lang, "Diese Seite ist noch nicht gebaut."))}</p></main></body></html>')
     return HTMLResponse(body)
 
 

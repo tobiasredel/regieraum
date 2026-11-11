@@ -1,17 +1,17 @@
 // Klangbericht in Klartext. Liest work/report.json (SPEC Abschnitt 9, Punkt 11) tolerant:
 // Die Schlüsselnamen der Pipeline stehen nicht bis ins Letzte fest, deshalb werden mehrere Schreibweisen akzeptiert.
-import { fmtClock, fmtDec, fmtDuration, fmtInt, h, neg, signed } from "./common.js";
+import { fmtClock, fmtDec, fmtDuration, fmtInt, h, neg, signed, t } from "./common.js";
 
 const first = (...vals) => vals.find((v) => v !== undefined && v !== null && v !== "");
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
-function gapInfo(t) {
-  const g = first(t.gaps, t.gap_list);
+function gapInfo(tr) {
+  const g = first(tr.gaps, tr.gap_list);
   let count = null;
   let ms = null;
   if (Array.isArray(g)) {
     count = g.length;
-    const sr = num(t.sample_rate) || 48000;
+    const sr = num(tr.sample_rate) || 48000;
     ms = g.reduce((sum, x) => {
       if (Array.isArray(x)) return sum + ((num(x[1]) || 0) / sr) * 1000; // [first_frame, frames]
       if (x && typeof x === "object") return sum + (num(x.ms) ?? ((num(x.to_ms) ?? 0) - (num(x.from_ms) ?? 0)));
@@ -20,28 +20,28 @@ function gapInfo(t) {
   } else if (num(g) !== null) {
     count = g;
   }
-  count = first(count, num(t.gap_count));
-  ms = first(ms, num(t.gap_ms), num(t.gap_total_ms));
+  count = first(count, num(tr.gap_count));
+  ms = first(ms, num(tr.gap_ms), num(tr.gap_total_ms));
   return { count, ms };
 }
 
-function trackView(t) {
-  const name = first(t.participant_name, t.name, t.speaker, "Spur");
-  const before = num(first(t.lufs_speech_before, t.lufs_before, t.loudness_before, t.before?.lufs, t.lufs_in, t.in_lufs));
-  const after = num(first(t.lufs_speech_after, t.lufs_after, t.loudness_after, t.after?.lufs, t.lufs_out, t.out_lufs, t.lufs));
-  const gain = num(first(t.gain_db, t.applied_gain_db, t.leveling_gain_db));
-  const drift = num(first(t.drift_ppm, t.clock?.drift_ppm));
-  const offset = num(first(t.start_offset_ms, t.offset_ms, t.clock?.start_offset_ms));
-  const clips = num(first(t.clip_events, t.clips, t.clipped));
-  return { name, before, after, gain, drift, offset, clips, gaps: gapInfo(t) };
+function trackView(tr) {
+  const name = first(tr.participant_name, tr.name, tr.speaker, t("Spur"));
+  const before = num(first(tr.lufs_speech_before, tr.lufs_before, tr.loudness_before, tr.before?.lufs, tr.lufs_in, tr.in_lufs));
+  const after = num(first(tr.lufs_speech_after, tr.lufs_after, tr.loudness_after, tr.after?.lufs, tr.lufs_out, tr.out_lufs, tr.lufs));
+  const gain = num(first(tr.gain_db, tr.applied_gain_db, tr.leveling_gain_db));
+  const drift = num(first(tr.drift_ppm, tr.clock?.drift_ppm));
+  const offset = num(first(tr.start_offset_ms, tr.offset_ms, tr.clock?.start_offset_ms));
+  const clips = num(first(tr.clip_events, tr.clips, tr.clipped));
+  return { name, before, after, gain, drift, offset, clips, gaps: gapInfo(tr) };
 }
 
-const lufs = (v) => (v === null ? "–" : `${neg(v)} LUFS`);
+const lufs = (v) => (v === null ? "–" : t("{n} LUFS", { n: neg(v) }));
 
 export function renderReport(report, targetLufs = null) {
   const box = h("div", { class: "m-report" });
   if (!report || typeof report !== "object") {
-    box.append(h("p", { class: "tr-small" }, "Es liegt noch kein Klangbericht vor. Er entsteht bei der Verarbeitung."));
+    box.append(h("p", { class: "tr-small" }, t("Es liegt noch kein Klangbericht vor. Er entsteht bei der Verarbeitung.")));
     return box;
   }
   const tracks = (Array.isArray(first(report.tracks, report.stems, report.speakers)) ? first(report.tracks, report.stems, report.speakers) : []).map(trackView);
@@ -53,23 +53,33 @@ export function renderReport(report, targetLufs = null) {
   // Satz für Satz in Klartext
   const lines = [];
   if (final !== null) {
-    lines.push(`Die fertige Folge liegt bei ${lufs(final)}${target !== null ? ` (Ziel ${lufs(target)})` : ""}${peak !== null ? `, True Peak ${neg(peak)} dB` : ""}.`);
+    const p = { lufs: lufs(final), target: target !== null ? lufs(target) : "", peak: peak !== null ? neg(peak) : "" };
+    lines.push(target !== null
+      ? (peak !== null ? t("Die fertige Folge liegt bei {lufs} (Ziel {target}), True Peak {peak} dB.", p) : t("Die fertige Folge liegt bei {lufs} (Ziel {target}).", p))
+      : (peak !== null ? t("Die fertige Folge liegt bei {lufs}, True Peak {peak} dB.", p) : t("Die fertige Folge liegt bei {lufs}.", p)));
   } else if (duration !== null) {
-    lines.push(`Länge der fertigen Folge: ${fmtClock(duration)}.`);
+    lines.push(t("Länge der fertigen Folge: {time}.", { time: fmtClock(duration) }));
   }
-  const lev = tracks.filter((t) => t.gain !== null);
+  const lev = tracks.filter((tr) => tr.gain !== null);
   if (lev.length) {
-    lines.push("Pegelangleich: " + lev.map((t) => (Math.abs(t.gain) < 0.1 ? `${t.name} unverändert` : `${t.name} ${t.gain > 0 ? "angehoben" : "abgesenkt"} um ${fmtDec(Math.abs(t.gain))} dB`)).join(", ") + ".");
+    const items = lev.map((tr) => (Math.abs(tr.gain) < 0.1
+      ? t("{name} unverändert", { name: tr.name })
+      : tr.gain > 0 ? t("{name} angehoben um {db} dB", { name: tr.name, db: fmtDec(Math.abs(tr.gain)) }) : t("{name} abgesenkt um {db} dB", { name: tr.name, db: fmtDec(Math.abs(tr.gain)) })));
+    lines.push(t("Pegelangleich: {items}.", { items: items.join(", ") }));
   }
-  const gapped = tracks.filter((t) => t.gaps.count > 0);
-  if (tracks.length && tracks.some((t) => t.gaps.count !== null)) {
+  const gapped = tracks.filter((tr) => tr.gaps.count > 0);
+  if (tracks.length && tracks.some((tr) => tr.gaps.count !== null)) {
     lines.push(gapped.length
-      ? "Lücken: " + gapped.map((t) => `${t.name} ${fmtInt(t.gaps.count)}${t.gaps.ms ? `, zusammen ${fmtDuration(t.gaps.ms) || "unter 1 s"}` : ""}`).join("; ") + ". Sie sind mit Stille gefüllt."
-      : "Keine Lücken in den Aufnahmen.");
+      ? t("Lücken: {items}. Sie sind mit Stille gefüllt.", {
+        items: gapped.map((tr) => (tr.gaps.ms
+          ? t("{name} {count}, zusammen {duration}", { name: tr.name, count: fmtInt(tr.gaps.count), duration: fmtDuration(tr.gaps.ms) || t("unter 1 s") })
+          : t("{name} {count}", { name: tr.name, count: fmtInt(tr.gaps.count) }))).join("; "),
+      })
+      : t("Keine Lücken in den Aufnahmen."));
   }
-  const clipped = tracks.filter((t) => t.clips > 0);
-  if (tracks.some((t) => t.clips !== null)) {
-    lines.push(clipped.length ? "Übersteuerungen: " + clipped.map((t) => `${t.name} ${fmtInt(t.clips)}`).join(", ") + "." : "Keine Übersteuerungen.");
+  const clipped = tracks.filter((tr) => tr.clips > 0);
+  if (tracks.some((tr) => tr.clips !== null)) {
+    lines.push(clipped.length ? t("Übersteuerungen: {items}.", { items: clipped.map((tr) => t("{name} {count}", { name: tr.name, count: fmtInt(tr.clips) })).join(", ") }) : t("Keine Übersteuerungen."));
   }
   if (lines.length) {
     const ul = h("ul", { class: "m-plain" });
@@ -79,19 +89,19 @@ export function renderReport(report, targetLufs = null) {
 
   if (tracks.length) {
     const grid = h("div", { class: "m-rep-tracks" });
-    for (const t of tracks) {
+    for (const tr of tracks) {
       const rows = [
-        ["Sprach-Lautheit vorher", lufs(t.before)],
-        ["Sprach-Lautheit nachher", lufs(t.after)],
-        ["Verstärkung", t.gain === null ? "–" : `${signed(t.gain)} dB`],
-        ["Drift", t.drift === null ? "–" : `${signed(t.drift, 0)} ppm`],
-        ["Startversatz", t.offset === null ? "–" : `${fmtInt(t.offset)} ms`],
-        ["Lücken", t.gaps.count === null ? "–" : t.gaps.count ? `${fmtInt(t.gaps.count)}${t.gaps.ms ? ` (${fmtDuration(t.gaps.ms) || "unter 1 s"})` : ""}` : "keine"],
-        ["Übersteuerungen", t.clips === null ? "–" : t.clips ? fmtInt(t.clips) : "keine"],
+        [t("Sprach-Lautheit vorher"), lufs(tr.before)],
+        [t("Sprach-Lautheit nachher"), lufs(tr.after)],
+        [t("Verstärkung"), tr.gain === null ? "–" : t("{n} dB", { n: signed(tr.gain) })],
+        [t("Drift"), tr.drift === null ? "–" : t("{n} ppm", { n: signed(tr.drift, 0) })],
+        [t("Startversatz"), tr.offset === null ? "–" : t("{n} ms", { n: fmtInt(tr.offset) })],
+        [t("Lücken"), tr.gaps.count === null ? "–" : tr.gaps.count ? (tr.gaps.ms ? t("{count} ({duration})", { count: fmtInt(tr.gaps.count), duration: fmtDuration(tr.gaps.ms) || t("unter 1 s") }) : fmtInt(tr.gaps.count)) : t("keine")],
+        [t("Übersteuerungen"), tr.clips === null ? "–" : tr.clips ? fmtInt(tr.clips) : t("keine")],
       ];
       const dl = h("dl", { class: "m-dl" });
       rows.forEach(([k, v]) => dl.append(h("div", null, h("dt", null, k), h("dd", { class: "m-num" }, v))));
-      grid.append(h("div", { class: "m-rep-track" }, h("h3", { class: "m-h3" }, t.name), dl));
+      grid.append(h("div", { class: "m-rep-track" }, h("h3", { class: "m-h3" }, tr.name), dl));
     }
     box.append(grid);
   }
@@ -100,9 +110,9 @@ export function renderReport(report, targetLufs = null) {
   if (warns.length) {
     const ul = h("ul", { class: "m-plain m-warn" });
     warns.forEach((w) => ul.append(h("li", { class: "tr-status-warn" }, String(w))));
-    box.append(h("h3", { class: "m-h3" }, "Warnungen"), ul);
+    box.append(h("h3", { class: "m-h3" }, t("Warnungen")), ul);
   } else {
-    box.append(h("p", { class: "tr-small" }, "Keine Warnungen."));
+    box.append(h("p", { class: "tr-small" }, t("Keine Warnungen.")));
   }
   return box;
 }

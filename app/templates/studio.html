@@ -1,13 +1,13 @@
 {% extends "_layout.html" %}
 {% set active = "studio" %}
-{% block title %}Studio{% endblock %}
+{% block title %}{{ t("Studio") }}{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/css/studio.css?v={{ v }}">{% endblock %}
 {% block content_class %} ps-content{% endblock %}
 {% block content %}
 <div id="ps-app" class="ps-app" data-role="host">
-  <h1>Studio</h1>
-  <p class="ps-lead">Wird geladen</p>
-  <noscript><p class="ps-error">Das Studio braucht JavaScript</p></noscript>
+  <h1>{{ t("Studio") }}</h1>
+  <p class="ps-lead">{{ t("Wird geladen") }}</p>
+  <noscript><p class="ps-error">{{ t("Das Studio braucht JavaScript") }}</p></noscript>
 </div>
 {% endblock %}
 {% block scripts %}<script type="module" src="/static/js/studio/main.js?v={{ v }}"></script>{% endblock %}

@@ -1,4 +1,4 @@
-"""Transkript: faster-whisper je Stem (Sprecher ist dadurch bekannt), Deutsch, VAD an.
+"""Transkript: faster-whisper je Stem (Sprecher ist dadurch bekannt), Sprache der Show (Manifest `language`, sonst Deutsch), VAD an.
 
 transcript.json in Sitzungszeit, transcript.vtt in Folgenzeit mit Sprecher (<v Name>).
 """
@@ -68,11 +68,12 @@ def run(m: dict, prog: Progress) -> dict:
     # Hugging-Face-Cache (Sperren, Metadaten) ebenfalls unter $PS_DATA/models; im Betrieb ist das ohnehin HF_HOME
     os.environ["HF_HOME"] = str(models)
     from faster_whisper import WhisperModel  # schwerer Import erst nach HF_HOME
+    language = str(m.get("language") or "de").strip().lower()[:2] or "de"  # Sprache der Show; ohne Angabe Deutsch
     people = []
     for t in m.get("tracks") or []:
         pid = t.get("participant_id") or t["id"]
         if pid not in [p[0] for p in people]:
-            people.append((pid, t.get("participant_name") or "Unbekannt"))
+            people.append((pid, t.get("participant_name") or ("Unbekannt" if language == "de" else "Unknown")))
     stems = [(pid, name, work / "stems" / f"{pid}.flac") for pid, name in people]
     stems = [s for s in stems if s[2].exists()]
     if not stems:
@@ -103,7 +104,7 @@ def run(m: dict, prog: Progress) -> dict:
             seg_audio = audio[r0 * 16:r1 * 16]
             if len(seg_audio) < 16000 * 0.3:
                 continue
-            segs, _info = model.transcribe(seg_audio, language="de", vad_filter=True,
+            segs, _info = model.transcribe(seg_audio, language=language, vad_filter=True,
                                            vad_parameters={"min_silence_duration_ms": 500}, beam_size=5,
                                            condition_on_previous_text=False)
             for sg in segs:
@@ -115,7 +116,7 @@ def run(m: dict, prog: Progress) -> dict:
             p(min(1.0, r1 / 1000 / max(dur, 1e-3)), f"Transkript für {name}")
         del audio
     segments.sort(key=lambda s: (s["start_ms"], s["end_ms"]))
-    write_json(out_dir / "transcript.json", {"segments": segments, "model": model_name, "language": "de"})
+    write_json(out_dir / "transcript.json", {"segments": segments, "model": model_name, "language": language})
 
     edl = m.get("edl") or {}
     report = read_json(work / "report.json", {}) or {}

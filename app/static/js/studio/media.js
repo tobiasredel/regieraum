@@ -1,16 +1,19 @@
 // Geräte: Unterstützung prüfen, Mikrofon und Kamera holen, verständliche Fehlermeldungen, Testton, Testquelle.
 
+const V = new URL(import.meta.url).search;
+const { t } = await import(`../i18n.js${V}`);
+
 /** Fehlt etwas Nötiges? Liefert eine deutsche Meldung oder null. Nur Feature-Erkennung, keine Browser-Weichen. */
 export function missingSupport() {
-  if (!window.isSecureContext) return "Das Studio funktioniert nur über eine sichere Verbindung (https). Bitte den Link genau so öffnen, wie er verschickt wurde";
+  if (!window.isSecureContext) return t("Das Studio funktioniert nur über eine sichere Verbindung (https). Bitte den Link genau so öffnen, wie er verschickt wurde");
   const need = [];
-  if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") need.push("Mikrofonzugriff");
+  if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") need.push(t("Mikrofonzugriff"));
   const AC = window.AudioContext || window.webkitAudioContext;
   if (!AC || !("audioWorklet" in AC.prototype) || typeof AudioWorkletNode === "undefined") need.push("AudioWorklet");
   if (typeof RTCPeerConnection === "undefined") need.push("WebRTC");
   if (typeof WebSocket === "undefined") need.push("WebSocket");
   if (!need.length) return null;
-  return `Dieser Browser kann hier nicht aufnehmen (es fehlt: ${need.join(", ")}). Bitte ein aktuelles Chrome, Edge, Firefox oder Safari verwenden`;
+  return t("Dieser Browser kann hier nicht aufnehmen (es fehlt: {missing}). Bitte ein aktuelles Chrome, Edge, Firefox oder Safari verwenden", { missing: need.join(", ") });
 }
 
 export function audioConstraints(deviceId, headphones) {
@@ -53,12 +56,19 @@ export async function listDevices() {
 
 export function mediaError(e, what = "Mikrofon") {
   const n = e && e.name;
+  const cam = what === "Kamera";
   if (n === "NotAllowedError" || n === "SecurityError") {
-    return `Zugriff auf das ${what} wurde verweigert. In den Website-Einstellungen des Browsers das ${what} für diese Seite erlauben und die Seite neu laden.`;
+    return cam
+      ? t("Zugriff auf die Kamera wurde verweigert. In den Website-Einstellungen des Browsers die Kamera für diese Seite erlauben und die Seite neu laden.")
+      : t("Zugriff auf das Mikrofon wurde verweigert. In den Website-Einstellungen des Browsers das Mikrofon für diese Seite erlauben und die Seite neu laden.");
   }
-  if (n === "NotFoundError" || n === "OverconstrainedError") return `Kein ${what} gefunden. Bitte ein Gerät anschließen und die Seite neu laden.`;
-  if (n === "NotReadableError" || n === "AbortError") return `Das ${what} lässt sich nicht öffnen. Vermutlich nutzt ein anderes Programm es gerade.`;
-  return `${what} nicht verfügbar (${(e && e.message) || n || "unbekannter Fehler"})`;
+  if (n === "NotFoundError" || n === "OverconstrainedError") {
+    return cam ? t("Keine Kamera gefunden. Bitte ein Gerät anschließen und die Seite neu laden.") : t("Kein Mikrofon gefunden. Bitte ein Gerät anschließen und die Seite neu laden.");
+  }
+  if (n === "NotReadableError" || n === "AbortError") {
+    return cam ? t("Die Kamera lässt sich nicht öffnen. Vermutlich nutzt ein anderes Programm sie gerade.") : t("Das Mikrofon lässt sich nicht öffnen. Vermutlich nutzt ein anderes Programm es gerade.");
+  }
+  return t("{what} nicht verfügbar ({reason})", { what: cam ? t("Kamera") : t("Mikrofon"), reason: (e && e.message) || n || t("unbekannter Fehler") });
 }
 
 /** Kurzer Testton über den Ausgang (1 s, 440 Hz, leise). */

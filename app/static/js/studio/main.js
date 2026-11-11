@@ -10,6 +10,7 @@ const [U, C, Store, Rec, Net, RTC, Snd, Media, Id, Plan] = await Promise.all([
   imp("sounds.js"), imp("media.js"), imp("identity.js"), imp("plan.js"),
 ]);
 const { h, fill, icon, dur, num1, toDb, toast, params, isMobile, api } = U;
+const { t } = await import(`../i18n.js${V}`);
 
 const app = document.getElementById("ps-app");
 const ROLE = app.dataset.role === "guest" ? "guest" : "host";
@@ -27,11 +28,11 @@ const S = {
 window.__studio = S; // für Tests und Fehlersuche
 
 // ====================================================================== Start
-boot().catch((e) => { console.error(e); showFatal("Das Studio konnte nicht starten", String(e && e.message || e)); });
+boot().catch((e) => { console.error(e); showFatal(t("Das Studio konnte nicht starten"), String(e && e.message || e)); });
 
 async function boot() {
   const missing = Media.missingSupport();
-  if (missing) { showFatal("Browser nicht unterstützt", missing); return; }
+  if (missing) { showFatal(t("Browser nicht unterstützt"), missing); return; }
   if (ROLE === "host") {
     const id = await Id.hostSession().catch((e) => { throw new Error(e.message); });
     S.token = id.token; S.me = id.participant;
@@ -40,12 +41,12 @@ async function boot() {
   } else {
     let info;
     try { info = await Id.inviteInfo(INVITE); } catch (e) {
-      const t = { invite_unknown: "Dieser Einladungslink ist unbekannt", invite_revoked: "Dieser Einladungslink wurde widerrufen", invite_expired: "Dieser Einladungslink ist abgelaufen" };
-      showFatal(t[e.code] || "Link nicht nutzbar", e.status ? "Bitte beim Host einen neuen Link anfragen" : e.message);
+      const known = { invite_unknown: () => t("Dieser Einladungslink ist unbekannt"), invite_revoked: () => t("Dieser Einladungslink wurde widerrufen"), invite_expired: () => t("Dieser Einladungslink ist abgelaufen") };
+      showFatal(known[e.code] ? known[e.code]() : t("Link nicht nutzbar"), e.status ? t("Bitte beim Host einen neuen Link anfragen") : e.message);
       return;
     }
     if (!info.info.valid && !info.stored) {
-      showFatal("Dieser Einmal-Link wurde bereits benutzt", "Bitte beim Host einen neuen Link anfragen");
+      showFatal(t("Dieser Einmal-Link wurde bereits benutzt"), t("Bitte beim Host einen neuen Link anfragen"));
       return;
     }
     if (info.stored) {
@@ -87,36 +88,36 @@ function renderCheck({ name, label }) {
   S.headphones = S.mobile ? false : pr.headphones !== false;
   S.micId = pr.micId || null;
   const err = h("p", { class: "ps-error", role: "alert", hidden: true });
-  const nameIn = h("input", { class: "tr-input", id: "ps-name", name: "name", autocomplete: "name", maxlength: 60, value: name || "", placeholder: "Vorname" });
-  const micSel = h("select", { class: "tr-input ps-select", id: "ps-mic", disabled: true }, h("option", {}, "Erst Mikrofon freigeben"));
+  const nameIn = h("input", { class: "tr-input", id: "ps-name", name: "name", autocomplete: "name", maxlength: 60, value: name || "", placeholder: t("Vorname") });
+  const micSel = h("select", { class: "tr-input ps-select", id: "ps-mic", disabled: true }, h("option", {}, t("Erst Mikrofon freigeben")));
   const meterFill = h("span", { class: "ps-meter-fill" });
   const meterText = h("span", { class: "ps-meter-db" }, "–");
-  const clipText = h("span", { class: "ps-meter-clip tr-status-error", hidden: true }, "Übersteuert");
+  const clipText = h("span", { class: "ps-meter-clip tr-status-error", hidden: true }, t("Übersteuert"));
   const hpYes = h("input", { type: "radio", name: "hp", id: "ps-hp-yes", value: "1", checked: S.headphones });
   const hpNo = h("input", { type: "radio", name: "hp", id: "ps-hp-no", value: "0", checked: !S.headphones });
   const camBox = h("input", { type: "checkbox", id: "ps-cam" });
   const camPrev = h("video", { class: "ps-cam-preview", muted: true, playsinline: true, autoplay: true, hidden: true });
   camPrev.muted = true;
-  const toneBtn = h("button", { class: "tr-btn tr-btn-secondary", type: "button", disabled: true }, icon("speaker"), "Testton abspielen");
-  const go = h("button", { class: "tr-btn tr-btn-primary", type: "submit", id: "ps-go" }, icon("mic"), "Mikrofon freigeben");
-  const hint = h("p", { class: "ps-small", id: "ps-go-hint" }, "Der Browser fragt nach dem Mikrofon. Danach erscheint der Pegel.");
+  const toneBtn = h("button", { class: "tr-btn tr-btn-secondary", type: "button", disabled: true }, icon("speaker"), t("Testton abspielen"));
+  const go = h("button", { class: "tr-btn tr-btn-primary", type: "submit", id: "ps-go" }, icon("mic"), t("Mikrofon freigeben"));
+  const hint = h("p", { class: "ps-small", id: "ps-go-hint" }, t("Der Browser fragt nach dem Mikrofon. Danach erscheint der Pegel."));
 
   const form = h("form", { class: "ps-check", novalidate: true },
     h("header", { class: "ps-check-head" },
-      h("h1", {}, ROLE === "host" ? "Studio" : "Beitreten"),
-      h("p", { class: "ps-lead" }, ROLE === "host" ? "Gerätecheck vor der Aufnahme" : (label ? `Einladung: ${label}. Kurzer Gerätecheck, dann geht es ins Studio.` : "Kurzer Gerätecheck, dann geht es ins Studio"))),
+      h("h1", {}, ROLE === "host" ? t("Studio") : t("Beitreten")),
+      h("p", { class: "ps-lead" }, ROLE === "host" ? t("Gerätecheck vor der Aufnahme") : (label ? t("Einladung: {label}. Kurzer Gerätecheck, dann geht es ins Studio.", { label }) : t("Kurzer Gerätecheck, dann geht es ins Studio")))),
     err,
     h("div", { class: "ps-check-grid" },
-      ROLE === "guest" ? h("div", { class: "ps-field" }, h("label", { class: "tr-label", for: "ps-name" }, "Name"), nameIn) : null,
-      h("div", { class: "ps-field" }, h("label", { class: "tr-label", for: "ps-mic" }, "Mikrofon"), micSel,
-        h("div", { class: "ps-meter", "aria-label": "Eingangspegel", role: "meter", "aria-valuemin": "-60", "aria-valuemax": "0" }, h("span", { class: "ps-meter-track" }, meterFill), meterText),
+      ROLE === "guest" ? h("div", { class: "ps-field" }, h("label", { class: "tr-label", for: "ps-name" }, t("Name")), nameIn) : null,
+      h("div", { class: "ps-field" }, h("label", { class: "tr-label", for: "ps-mic" }, t("Mikrofon")), micSel,
+        h("div", { class: "ps-meter", "aria-label": t("Eingangspegel"), role: "meter", "aria-valuemin": "-60", "aria-valuemax": "0" }, h("span", { class: "ps-meter-track" }, meterFill), meterText),
         clipText),
-      h("fieldset", { class: "ps-field ps-choice" }, h("legend", { class: "tr-label" }, "Kopfhörer"),
-        h("label", { for: "ps-hp-yes" }, hpYes, h("span", {}, "Mit Kopfhörern"), h("small", {}, "unbearbeitetes Signal, beste Qualität")),
-        h("label", { for: "ps-hp-no" }, hpNo, h("span", {}, "Ohne Kopfhörer"), h("small", {}, "Echounterdrückung an"))),
-      h("div", { class: "ps-field" }, h("span", { class: "tr-label" }, "Kamera"),
-        h("label", { class: "ps-check-line", for: "ps-cam" }, camBox, h("span", {}, "Kamera einschalten (nur live, wird nie aufgezeichnet)")), camPrev),
-      h("div", { class: "ps-field" }, h("span", { class: "tr-label" }, "Ausgang"), h("div", {}, toneBtn), h("small", {}, "Ist der Ton zu hören, passt der Ausgang"))),
+      h("fieldset", { class: "ps-field ps-choice" }, h("legend", { class: "tr-label" }, t("Kopfhörer")),
+        h("label", { for: "ps-hp-yes" }, hpYes, h("span", {}, t("Mit Kopfhörern")), h("small", {}, t("unbearbeitetes Signal, beste Qualität"))),
+        h("label", { for: "ps-hp-no" }, hpNo, h("span", {}, t("Ohne Kopfhörer")), h("small", {}, t("Echounterdrückung an")))),
+      h("div", { class: "ps-field" }, h("span", { class: "tr-label" }, t("Kamera")),
+        h("label", { class: "ps-check-line", for: "ps-cam" }, camBox, h("span", {}, t("Kamera einschalten (nur live, wird nie aufgezeichnet)"))), camPrev),
+      h("div", { class: "ps-field" }, h("span", { class: "tr-label" }, t("Ausgang")), h("div", {}, toneBtn), h("small", {}, t("Ist der Ton zu hören, passt der Ausgang")))),
     h("div", { class: "ps-check-actions" }, go, hint));
   fill(app, form);
 
@@ -126,11 +127,11 @@ function renderCheck({ name, label }) {
     micPermission().then((st) => {
       if (st !== "granted" && !TEST) return;
       quick = true;
-      fill(go, icon("mic"), "Wieder ins Studio");
-      hint.textContent = "Die Aufnahme läuft. Unterbrochene Teile werden im Hintergrund nachgeladen.";
+      fill(go, icon("mic"), t("Wieder ins Studio"));
+      hint.textContent = t("Die Aufnahme läuft. Unterbrochene Teile werden im Hintergrund nachgeladen.");
     });
   }
-  const showErr = (t) => { err.textContent = t; err.hidden = !t; };
+  const showErr = (text) => { err.textContent = text; err.hidden = !text; };
 
   async function ensureCtx() {
     if (S.ctx) { if (S.ctx.state !== "running") await S.ctx.resume().catch(() => {}); return; }
@@ -162,14 +163,14 @@ function renderCheck({ name, label }) {
     }
     analyser = new AnalyserNode(S.ctx, { fftSize: 2048 });
     srcNode.connect(analyser);
-    const t = S.mic.getAudioTracks()[0];
-    if (t && !TEST) S.micId = t.getSettings().deviceId || S.micId;
+    const track = S.mic.getAudioTracks()[0];
+    if (track && !TEST) S.micId = track.getSettings().deviceId || S.micId;
   }
 
   async function fillDevices() {
-    if (TEST) { fill(micSel, h("option", { value: "" }, "Testsignal (Klick je Sekunde)")); micSel.disabled = true; return; }
+    if (TEST) { fill(micSel, h("option", { value: "" }, t("Testsignal (Klick je Sekunde)"))); micSel.disabled = true; return; }
     const { mics } = await Media.listDevices();
-    fill(micSel, mics.map((d, i) => h("option", { value: d.deviceId, selected: d.deviceId === S.micId }, d.label || `Mikrofon ${i + 1}`)));
+    fill(micSel, mics.map((d, i) => h("option", { value: d.deviceId, selected: d.deviceId === S.micId }, d.label || t("Mikrofon {n}", { n: i + 1 }))));
     micSel.disabled = mics.length < 2;
   }
 
@@ -225,8 +226,8 @@ function renderCheck({ name, label }) {
         startMeter();
         toneBtn.disabled = false;
         if (quick) { await finishEnter(); return; }
-        fill(go, icon("mic"), "Studio betreten");
-        hint.textContent = "Pegel prüfen: Beim normalen Sprechen sollte der Balken etwa bis zur Hälfte reichen";
+        fill(go, icon("mic"), t("Studio betreten"));
+        hint.textContent = t("Pegel prüfen: Beim normalen Sprechen sollte der Balken etwa bis zur Hälfte reichen");
         go.disabled = false;
         return;
       }
@@ -241,14 +242,14 @@ function renderCheck({ name, label }) {
   async function finishEnter() {
     if (ROLE === "guest") {
       const nm = nameIn.value.trim();
-      if (!nm) { nameIn.classList.add("is-error"); showErr("Bitte einen Namen angeben"); nameIn.focus(); go.disabled = false; return; }
+      if (!nm) { nameIn.classList.add("is-error"); showErr(t("Bitte einen Namen angeben")); nameIn.focus(); go.disabled = false; return; }
       nameIn.classList.remove("is-error");
       Id.prefs.save({ name: nm });
       try {
         const id = await Id.joinGuest(INVITE, nm);
         S.token = id.token; S.me = id.participant;
       } catch (err2) {
-        if (err2.code === "invite_used") { showFatal("Dieser Einmal-Link wurde bereits benutzt", "Bitte beim Host einen neuen Link anfragen"); return; }
+        if (err2.code === "invite_used") { showFatal(t("Dieser Einmal-Link wurde bereits benutzt"), t("Bitte beim Host einen neuen Link anfragen")); return; }
         throw err2;
       }
     }
@@ -262,7 +263,7 @@ async function micPermission() {
   try { return (await navigator.permissions.query({ name: "microphone" })).state; } catch { return "unknown"; }
 }
 
-function stopStream(s) { if (s) for (const t of s.getTracks()) t.stop(); }
+function stopStream(s) { if (s) for (const track of s.getTracks()) track.stop(); }
 
 function setMeter(fillEl, textEl, db) {
   const pct = Math.max(0, Math.min(100, ((db + 60) / 60) * 100));
@@ -281,7 +282,7 @@ async function enterStudio() {
   await S.recorder.init(S.ctx, S.audioClock);
   S.recorder.attach(S.mic, { headphones: S.headphones, device_label: micLabel(), test_signal: TEST || undefined });
   wireRecorder();
-  if (S.recovering) toast(S.recovering === 1 ? "Eine unterbrochene Spur wird nachgeladen" : `${S.recovering} unterbrochene Spuren werden nachgeladen`);
+  if (S.recovering) toast(S.recovering === 1 ? t("Eine unterbrochene Spur wird nachgeladen") : t("{n} unterbrochene Spuren werden nachgeladen", { n: S.recovering }));
 
   S.jingles = new Snd.JinglePlayer(S.ctx, S.audioClock, S.clock, () => S.token);
   S.rtcAudio = S.mic.getAudioTracks()[0].clone();
@@ -299,7 +300,7 @@ async function enterStudio() {
   S.socket = new Net.RoomSocket(S.token, S.clock);
   S.socket.addEventListener("message", (e) => onMessage(e.detail));
   S.socket.addEventListener("open", () => { sendState(); setConn(""); S.recorder.pump(true); });
-  S.socket.addEventListener("close", () => setConn("Verbindung zum Studio unterbrochen, neuer Versuch läuft"));
+  S.socket.addEventListener("close", () => setConn(t("Verbindung zum Studio unterbrochen, neuer Versuch läuft")));
   S.socket.addEventListener("fatal", (e) => onSocketFatal(e.detail));
   S.socket.connect();
 
@@ -311,8 +312,8 @@ async function enterStudio() {
 }
 
 function micLabel() {
-  const t = S.mic && S.mic.getAudioTracks()[0];
-  return TEST ? "Testsignal" : (t && t.label) || "";
+  const track = S.mic && S.mic.getAudioTracks()[0];
+  return TEST ? "Testsignal" : (track && track.label) || "";
 }
 
 function wireRecorder() {
@@ -329,11 +330,11 @@ function wireRecorder() {
     }
     updateMeter(S.me.id, S.localMeter);
   });
-  R.addEventListener("fatal", (e) => showBanner("Zugang abgelaufen, Upload gestoppt: " + e.detail.error.message, "error"));
+  R.addEventListener("fatal", (e) => showBanner(t("Zugang abgelaufen, Upload gestoppt: {message}", { message: e.detail.error.message }), "error"));
   R.addEventListener("store-error", (e) => showBanner(e.detail.message, "warn"));
   R.addEventListener("track-error", (e) => toast(e.detail.message));
   R.addEventListener("discontinuity", () => splitTrack("Audio war unterbrochen"));
-  R.addEventListener("track-incomplete", () => showBanner("Einige Teile der Aufnahme konnten nicht hochgeladen werden", "warn"));
+  R.addEventListener("track-incomplete", () => showBanner(t("Einige Teile der Aufnahme konnten nicht hochgeladen werden"), "warn"));
 }
 
 /** Neue Spur beginnen (Gerätewechsel, Unterbrechung). Die alte wird abgeschlossen und hochgeladen. */
@@ -387,7 +388,7 @@ function onMessage(m) {
       S.progress.clear();
       S.recorder.discardEpisode(m.episode_id);
       UI.uploadKey = null;
-      toast(ROLE === "host" ? "Aufnahme verworfen. Der Sendeplan steht für die neue Aufnahme bereit" : "Die Aufnahme wurde verworfen und wird neu begonnen", 6000);
+      toast(ROLE === "host" ? t("Aufnahme verworfen. Der Sendeplan steht für die neue Aufnahme bereit") : t("Die Aufnahme wurde verworfen und wird neu begonnen"), 6000);
       renderAll();
       break;
     case "sound.play":
@@ -397,11 +398,11 @@ function onMessage(m) {
       S.jingles.stop(m);
       break;
     case "marker":
-      if (ROLE === "host") toast(`Marker gesetzt bei ${dur(m.at)}`);
+      if (ROLE === "host") toast(t("Marker gesetzt bei {time}", { time: dur(m.at) }));
       break;
     case "error":
       if (m.code === "unknown_type") break; // z. B. Begleiter, den der Server noch nicht kennt
-      toast(m.message || "Fehler");
+      toast(m.message || t("Fehler"));
       break;
     default:
       if (m.type && m.type.startsWith("assist.") && S.plan) {
@@ -440,17 +441,17 @@ function applyRoom(room) {
 function onSocketFatal(d) {
   if (d.code === "replaced") {
     S.recorder.finishActive("replaced");
-    showBanner("Das Studio ist in einem anderen Fenster geöffnet. Dieses Fenster nimmt nicht mehr auf.", "error");
+    showBanner(t("Das Studio ist in einem anderen Fenster geöffnet. Dieses Fenster nimmt nicht mehr auf."), "error");
     return;
   }
   if (d.code === "room_full") {
-    showFatal("Das Studio ist voll", d.message || "Es sind höchstens vier Teilnehmer gleichzeitig möglich",
-      h("button", { class: "tr-btn tr-btn-primary", type: "button", onclick: () => location.reload() }, "Erneut versuchen"));
+    showFatal(t("Das Studio ist voll"), d.message || t("Es sind höchstens vier Teilnehmer gleichzeitig möglich"),
+      h("button", { class: "tr-btn tr-btn-primary", type: "button", onclick: () => location.reload() }, t("Erneut versuchen")));
     return;
   }
   // unauthorized
   if (ROLE === "guest") Id.forgetGuest(INVITE); else Id.forgetHost();
-  showFatal("Zugang abgelaufen oder ungültig", d.message || "Bitte den Einladungslink erneut öffnen");
+  showFatal(t("Zugang abgelaufen oder ungültig"), d.message || t("Bitte den Einladungslink erneut öffnen"));
 }
 
 function sendState() {
@@ -507,7 +508,7 @@ async function setCam(on) {
 async function refreshDeviceSelect() {
   if (!UI.micSel || TEST) return;
   const { mics } = await Media.listDevices().catch(() => ({ mics: [] }));
-  fill(UI.micSel, mics.map((d, i) => h("option", { value: d.deviceId, selected: d.deviceId === S.micId }, d.label || `Mikrofon ${i + 1}`)));
+  fill(UI.micSel, mics.map((d, i) => h("option", { value: d.deviceId, selected: d.deviceId === S.micId }, d.label || t("Mikrofon {n}", { n: i + 1 }))));
 }
 
 // ---------------------------------------------------------------------- Live-Medien
@@ -545,12 +546,12 @@ function detachMedia(id) {
 function needAudioUnlock() {
   if (UI.unlock) return;
   UI.unlock = h("div", { class: "ps-banner is-warn", role: "alert" },
-    h("p", {}, "Der Browser hat die Wiedergabe angehalten"),
+    h("p", {}, t("Der Browser hat die Wiedergabe angehalten")),
     h("button", { class: "tr-btn tr-btn-secondary", type: "button", onclick: async () => {
       await S.ctx.resume().catch(() => {});
       for (const m of S.media.values()) m.audio.play().catch(() => {});
       UI.unlock.remove(); UI.unlock = null;
-    } }, icon("speaker"), "Ton einschalten"));
+    } }, icon("speaker"), t("Ton einschalten")));
   UI.banners.append(UI.unlock);
 }
 
@@ -575,16 +576,16 @@ function onVisibility() {
     if (S.wasHidden) {
       S.wasHidden = false;
       showBanner(S.mobile
-        ? "Das Studio war im Hintergrund. Auf Handy und Tablet kann das die Aufnahme unterbrechen. Bitte im Vordergrund lassen."
-        : "Das Studio war im Hintergrund. Die Aufnahme läuft weiter, das Fenster bitte offen lassen.", "warn", 12000);
+        ? t("Das Studio war im Hintergrund. Auf Handy und Tablet kann das die Aufnahme unterbrechen. Bitte im Vordergrund lassen.")
+        : t("Das Studio war im Hintergrund. Die Aufnahme läuft weiter, das Fenster bitte offen lassen."), "warn", 12000);
     }
   }
 }
 
 function onKey(e) {
   if (ROLE !== "host" || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
-  const t = e.target;
-  if (t && (t.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']") || t.isContentEditable)) return;
+  const el = e.target;
+  if (el && (el.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']") || el.isContentEditable)) return;
   if (document.querySelector("dialog[open]")) return;
   // Sendeplan und Begleiter: Pfeile schalten den Abschnitt, I gibt einen Impuls, / springt ins Nachschlagen, M setzt einen Marker
   if (S.plan && (e.key === "ArrowRight" || e.key === "ArrowLeft")) { e.preventDefault(); S.plan.step(e.key === "ArrowRight" ? 1 : -1); return; }
@@ -601,13 +602,13 @@ function onKey(e) {
 /** Steuerbefehl des Hosts senden; ohne Verbindung sagen, dass er nicht ankam. */
 function ctl(msg) {
   if (S.socket && S.socket.send(msg)) return true;
-  toast("Keine Verbindung zum Studio. Bitte gleich noch einmal versuchen.", 5000);
+  toast(t("Keine Verbindung zum Studio. Bitte gleich noch einmal versuchen."), 5000);
   return false;
 }
 
 function playSound(s) {
   const ep = S.room && S.room.episode;
-  if (ep && ep.paused) { toast("In der Pause sind Jingles gesperrt"); return; }
+  if (ep && ep.paused) { toast(t("In der Pause sind Jingles gesperrt")); return; }
   ctl({ type: "sound.play", sound_id: s.id });
 }
 
@@ -626,71 +627,71 @@ function buildStudio() {
   UI.audioSink = h("div", { class: "ps-audio-sink", hidden: true });
 
   UI.stepsHost = h("div", { class: "ps-steps-host" }); // Sendemodus: hier stehen die Abschnitte als Leiste
-  const bar = UI.bar = h("section", { class: "ps-bar", "aria-label": "Aufnahme" },
+  const bar = UI.bar = h("section", { class: "ps-bar", "aria-label": t("Aufnahme") },
     h("div", { class: "ps-bar-text" }, UI.status, UI.statusSub,
-      h("p", { class: "ps-small ps-keys ps-live-only ps-step-keys" }, "Abschnitt", kbd("←"), kbd("→"))),
+      h("p", { class: "ps-small ps-keys ps-live-only ps-step-keys" }, t("Abschnitt"), kbd("←"), kbd("→"))),
     UI.stepsHost, UI.controls);
 
   // Eigenes Gerät
   UI.muteBtn = h("button", { class: "tr-btn tr-btn-secondary", type: "button", id: "ps-mute", onclick: () => setMuted(!S.muted) });
   UI.camBtn = h("button", { class: "tr-btn tr-btn-secondary", type: "button", id: "ps-camtoggle", onclick: () => setCam(!S.cam) });
   UI.hpSel = h("select", { class: "tr-input ps-select", id: "ps-hp", onchange: () => switchMic({ headphones: UI.hpSel.value === "1" }) },
-    h("option", { value: "1" }, "Mit Kopfhörern"), h("option", { value: "0" }, "Ohne Kopfhörer"));
+    h("option", { value: "1" }, t("Mit Kopfhörern")), h("option", { value: "0" }, t("Ohne Kopfhörer")));
   UI.micSel = h("select", { class: "tr-input ps-select", id: "ps-mic2", disabled: !!TEST, onchange: () => switchMic({ deviceId: UI.micSel.value }) });
-  UI.muteNote = h("p", { class: "ps-mute-note tr-status-warn", hidden: true }, "Stumm: Live-Ton und Aufnahme sind still");
+  UI.muteNote = h("p", { class: "ps-mute-note tr-status-warn", hidden: true }, t("Stumm: Live-Ton und Aufnahme sind still"));
   UI.selfMeterFill = h("span", { class: "ps-meter-fill" });
   UI.selfMeterDb = h("span", { class: "ps-meter-db" }, "–");
-  UI.selfClip = h("span", { class: "ps-meter-clip tr-status-error", hidden: true }, "Übersteuert");
+  UI.selfClip = h("span", { class: "ps-meter-clip tr-status-error", hidden: true }, t("Übersteuert"));
   UI.selfVideo = h("video", { autoplay: true, playsinline: true, muted: true });
   UI.selfVideo.muted = true;
   UI.selfVideo.setAttribute("playsinline", "");
   // Bühne: Kamerabilder groß, sobald eine Kamera läuft (nur live, nie aufgezeichnet)
   UI.tiles = new Map();
   UI.stage = h("div", { class: "ps-stage" });
-  UI.stageWrap = h("section", { class: "ps-stage-wrap", "aria-label": "Kamerabilder", hidden: true }, UI.stage);
-  const self = UI.selfSec = h("section", { class: "ps-self", "aria-label": "Eigenes Gerät" },
-    h("h2", { class: "ps-col-title" }, "Eigenes Gerät"),
-    h("div", { class: "ps-meter is-large", role: "meter", "aria-label": "Eigener Pegel" }, h("span", { class: "ps-meter-track" }, UI.selfMeterFill), UI.selfMeterDb),
+  UI.stageWrap = h("section", { class: "ps-stage-wrap", "aria-label": t("Kamerabilder"), hidden: true }, UI.stage);
+  const self = UI.selfSec = h("section", { class: "ps-self", "aria-label": t("Eigenes Gerät") },
+    h("h2", { class: "ps-col-title" }, t("Eigenes Gerät")),
+    h("div", { class: "ps-meter is-large", role: "meter", "aria-label": t("Eigener Pegel") }, h("span", { class: "ps-meter-track" }, UI.selfMeterFill), UI.selfMeterDb),
     UI.selfClip, UI.muteNote,
     h("div", { class: "ps-self-actions" }, UI.muteBtn, UI.camBtn),
     h("div", { class: "ps-self-fields" },
-      h("div", { class: "ps-field" }, h("label", { class: "tr-label", for: "ps-hp" }, "Hören über"), UI.hpSel),
-      h("div", { class: "ps-field" }, h("label", { class: "tr-label", for: "ps-mic2" }, "Mikrofon"), UI.micSel)),
-    h("p", { class: "ps-small" }, "Ein Wechsel beginnt eine neue Spur. Bisheriges bleibt erhalten."));
+      h("div", { class: "ps-field" }, h("label", { class: "tr-label", for: "ps-hp" }, t("Hören über")), UI.hpSel),
+      h("div", { class: "ps-field" }, h("label", { class: "tr-label", for: "ps-mic2" }, t("Mikrofon")), UI.micSel)),
+    h("p", { class: "ps-small" }, t("Ein Wechsel beginnt eine neue Spur. Bisheriges bleibt erhalten.")));
 
-  UI.peers = h("ul", { class: "ps-peers", "aria-label": "Teilnehmer" });
-  const peers = UI.peersSec = h("section", { class: "ps-peers-wrap", "aria-label": "Teilnehmer" }, h("h2", { class: "ps-col-title" }, "Teilnehmer"), UI.peers);
+  UI.peers = h("ul", { class: "ps-peers", "aria-label": t("Teilnehmer") });
+  const peers = UI.peersSec = h("section", { class: "ps-peers-wrap", "aria-label": t("Teilnehmer") }, h("h2", { class: "ps-col-title" }, t("Teilnehmer")), UI.peers);
 
   const main = [UI.banners, UI.conn, bar, UI.upload, UI.stageWrap];
   if (isHost) {
     UI.board = h("div", { class: "ps-board" });
-    UI.running = h("ul", { class: "ps-running", "aria-label": "Laufende Sounds" });
-    UI.markerIn = h("input", { class: "tr-input", id: "ps-marker", type: "text", maxlength: 120, placeholder: "Bezeichnung (optional)", autocomplete: "off" });
-    UI.markerBtn = h("button", { class: "tr-btn tr-btn-secondary", type: "submit" }, icon("flag"), "Marker setzen");
+    UI.running = h("ul", { class: "ps-running", "aria-label": t("Laufende Sounds") });
+    UI.markerIn = h("input", { class: "tr-input", id: "ps-marker", type: "text", maxlength: 120, placeholder: t("Bezeichnung (optional)"), autocomplete: "off" });
+    UI.markerBtn = h("button", { class: "tr-btn tr-btn-secondary", type: "submit" }, icon("flag"), t("Marker setzen"));
     const marker = h("form", { class: "ps-marker", onsubmit: (e) => { e.preventDefault(); ctl({ type: "marker", label: UI.markerIn.value.trim() }); UI.markerIn.value = ""; } },
-      h("label", { class: "tr-label", for: "ps-marker" }, "Marker"), h("div", { class: "ps-inline" }, UI.markerIn, UI.markerBtn));
-    const board = UI.boardSec = h("section", { class: "ps-sounds", "aria-label": "Soundboard" },
-      h("div", { class: "ps-col-head" }, h("h2", { class: "ps-col-title" }, "Soundboard"), h("span", { class: "ps-small ps-keys" }, kbd("1"), "bis", kbd("9"))),
-      UI.board, UI.running, marker, h("p", { class: "ps-small ps-live-only ps-hint-keys" }, "Marker setzen", kbd("M")));
+      h("label", { class: "tr-label", for: "ps-marker" }, t("Marker")), h("div", { class: "ps-inline" }, UI.markerIn, UI.markerBtn));
+    const board = UI.boardSec = h("section", { class: "ps-sounds", "aria-label": t("Soundboard") },
+      h("div", { class: "ps-col-head" }, h("h2", { class: "ps-col-title" }, t("Soundboard")), h("span", { class: "ps-small ps-keys" }, kbd("1"), t("bis"), kbd("9"))),
+      UI.board, UI.running, marker, h("p", { class: "ps-small ps-live-only ps-hint-keys" }, t("Marker setzen"), kbd("M")));
     // Sendemodus (nur während der Aufnahme): Pegel und Zustand in einer Zeile, alles Übrige hinter „Technik“
     UI.liveMeters = h("div", { class: "ps-live-meters" });
     UI.liveState = h("p", { class: "ps-live-state", role: "status" });
     UI.liveMute = h("button", { class: "ps-icon-btn", type: "button", id: "ps-live-mute", onclick: () => setMuted(!S.muted) });
     UI.liveCam = h("button", { class: "ps-icon-btn", type: "button", id: "ps-live-cam", onclick: () => setCam(!S.cam) });
-    UI.liveBox = h("section", { class: "ps-livebox", "aria-label": "Pegel und Zustand", hidden: true },
+    UI.liveBox = h("section", { class: "ps-livebox", "aria-label": t("Pegel und Zustand"), hidden: true },
       UI.liveMeters,
       h("div", { class: "ps-live-foot" }, UI.liveState,
         h("div", { class: "ps-live-actions" }, UI.liveMute, UI.liveCam,
-          h("button", { class: "tr-btn tr-btn-secondary ps-btn-compact", type: "button", id: "ps-tech-open", onclick: () => UI.tech.showModal() }, "Technik"))));
+          h("button", { class: "tr-btn tr-btn-secondary ps-btn-compact", type: "button", id: "ps-tech-open", onclick: () => UI.tech.showModal() }, t("Technik")))));
     UI.techBody = h("div", { class: "ps-tech-body" });
     UI.tech = h("dialog", { class: "tr-modal ps-dialog ps-tech", "aria-labelledby": "ps-tech-title" },
-      h("div", { class: "ps-tech-head" }, h("h2", { id: "ps-tech-title" }, "Technik"),
-        h("button", { class: "tr-btn tr-btn-secondary", type: "button", id: "ps-tech-close", onclick: () => UI.tech.close() }, "Schließen")),
+      h("div", { class: "ps-tech-head" }, h("h2", { id: "ps-tech-title" }, t("Technik")),
+        h("button", { class: "tr-btn tr-btn-secondary", type: "button", id: "ps-tech-close", onclick: () => UI.tech.close() }, t("Schließen"))),
       UI.techBody);
     main.push(UI.liveBox, peers, board, self);
     UI.main = h("div", { class: "ps-main" }, main);
     UI.cardsCol = h("div", { class: "ps-live-cards", hidden: true });
-    UI.planCol = h("aside", { class: "ps-plan", "aria-label": "Sendeplan" });
+    UI.planCol = h("aside", { class: "ps-plan", "aria-label": t("Sendeplan") });
     S.plan = new Plan.PlanColumn(UI.planCol, { send: (m) => S.socket && S.socket.send(m), token: () => S.token, now: () => S.clock.now() });
     UI.root = h("div", { class: "ps-studio is-host" }, UI.main, UI.cardsCol, UI.planCol);
     fill(app, UI.root, UI.audioSink, stopDialog(), UI.tech);
@@ -701,18 +702,18 @@ function buildStudio() {
     fill(app, UI.root, UI.audioSink);
   }
   refreshDeviceSelect();
-  if (TEST) fill(UI.micSel, h("option", {}, "Testsignal"));
+  if (TEST) fill(UI.micSel, h("option", {}, t("Testsignal")));
   renderAll();
 }
 
 function stopDialog() {
   UI.dialog = h("dialog", { class: "tr-modal ps-dialog", "aria-labelledby": "ps-dlg-title" },
     h("form", { method: "dialog" },
-      h("h2", { id: "ps-dlg-title" }, "Aufnahme beenden?"),
-      h("p", {}, "Danach laden alle Teilnehmer ihre Spuren fertig hoch. Weiter aufnehmen geht dann nicht mehr."),
+      h("h2", { id: "ps-dlg-title" }, t("Aufnahme beenden?")),
+      h("p", {}, t("Danach laden alle Teilnehmer ihre Spuren fertig hoch. Weiter aufnehmen geht dann nicht mehr.")),
       h("div", { class: "ps-dialog-actions" },
-        h("button", { class: "tr-btn tr-btn-secondary", value: "cancel" }, "Weiter aufnehmen"),
-        h("button", { class: "tr-btn tr-btn-primary", value: "stop", id: "ps-stop-confirm" }, icon("square"), "Beenden"))));
+        h("button", { class: "tr-btn tr-btn-secondary", value: "cancel" }, t("Weiter aufnehmen")),
+        h("button", { class: "tr-btn tr-btn-primary", value: "stop", id: "ps-stop-confirm" }, icon("square"), t("Beenden")))));
   UI.dialog.addEventListener("close", () => { if (UI.dialog.returnValue === "stop") ctl({ type: "rec.stop" }); });
   return UI.dialog;
 }
@@ -721,7 +722,7 @@ function stopDialog() {
 function kbd(key) { return h("kbd", { class: "ps-kbd" }, key); }
 
 function discardButton(episodeId) {
-  return h("button", { class: "tr-btn tr-btn-secondary", type: "button", id: "ps-discard", onclick: () => discardRecording(episodeId) }, icon("rotate-ccw"), "Aufnahme verwerfen");
+  return h("button", { class: "tr-btn tr-btn-secondary", type: "button", id: "ps-discard", onclick: () => discardRecording(episodeId) }, icon("rotate-ccw"), t("Aufnahme verwerfen"));
 }
 
 /** Rückfrage als Dialog. Liefert true, wenn bestätigt wurde. */
@@ -732,7 +733,7 @@ function ask(title, text, okLabel) {
         h("h2", { id: "ps-ask-title" }, title),
         h("p", {}, text),
         h("div", { class: "ps-dialog-actions" },
-          h("button", { class: "tr-btn tr-btn-secondary", value: "cancel" }, "Abbrechen"),
+          h("button", { class: "tr-btn tr-btn-secondary", value: "cancel" }, t("Abbrechen")),
           h("button", { class: "tr-btn tr-btn-primary", value: "ok", id: "ps-ask-ok" }, okLabel))));
     dlg.addEventListener("close", () => { const ok = dlg.returnValue === "ok"; dlg.remove(); resolve(ok); });
     document.body.append(dlg);
@@ -742,14 +743,14 @@ function ask(title, text, okLabel) {
 
 /** Aufnahme verwerfen und neu ansetzen: Spuren weg, der Sendeplan mit den Dossiers bleibt (SPEC Abschnitt 16). */
 async function discardRecording(episodeId) {
-  if (!(await ask("Aufnahme verwerfen?", "Alle Spuren dieser Aufnahme werden gelöscht. Der Sendeplan mit den Dossiers bleibt und steht für die neue Aufnahme bereit.", "Verwerfen"))) return;
+  if (!(await ask(t("Aufnahme verwerfen?"), t("Alle Spuren dieser Aufnahme werden gelöscht. Der Sendeplan mit den Dossiers bleibt und steht für die neue Aufnahme bereit."), t("Verwerfen")))) return;
   const call = (body) => api("POST", `/api/host/episodes/${encodeURIComponent(episodeId)}/discard`, { token: S.token, body });
   try {
     await call({});
   } catch (e) {
-    if (e.code !== "plan_conflict") { toast(e.message || "Verwerfen fehlgeschlagen", 6000); return; }
-    if (!(await ask("Sendeplan geht verloren", e.message, "Trotzdem verwerfen"))) return;
-    try { await call({ drop_plan: true }); } catch (e2) { toast(e2.message || "Verwerfen fehlgeschlagen", 6000); }
+    if (e.code !== "plan_conflict") { toast(e.message || t("Verwerfen fehlgeschlagen"), 6000); return; }
+    if (!(await ask(t("Sendeplan geht verloren"), e.message, t("Trotzdem verwerfen")))) return;
+    try { await call({ drop_plan: true }); } catch (e2) { toast(e2.message || t("Verwerfen fehlgeschlagen"), 6000); }
   }
 }
 
@@ -759,7 +760,7 @@ function showBanner(text, kind = "warn", ms = 0) {
   if (!UI.banners) { toast(text, 8000); return; }
   const el = h("div", { class: `ps-banner is-${kind}`, role: kind === "error" ? "alert" : "status" },
     h("p", {}, text),
-    h("button", { type: "button", class: "ps-icon-btn", "aria-label": "Schließen", onclick: () => el.remove() }, icon("x")));
+    h("button", { type: "button", class: "ps-icon-btn", "aria-label": t("Schließen"), onclick: () => el.remove() }, icon("x")));
   UI.banners.append(el);
   if (ms) setTimeout(() => el.remove(), ms);
 }
@@ -814,23 +815,23 @@ function renderBar() {
   const isHost = ROLE === "host";
   let status = "", cls = "", sub = "";
   if (ep.status === "recording") {
-    if (now < start) { status = `Aufnahme beginnt in ${Math.ceil((start - now) / 1000)}`; cls = "tr-status-error"; }
+    if (now < start) { status = t("Aufnahme beginnt in {n}", { n: Math.ceil((start - now) / 1000) }); cls = "tr-status-error"; }
     else if (ep.paused) {
       const p = ep.pauses[ep.pauses.length - 1];
-      status = `Pause ${dur(elapsed)}`; cls = "tr-status-warn";
-      sub = `Pausiert seit ${dur(elapsed - p.from)}. Aufnahme läuft lokal weiter, der Bereich wird später herausgeschnitten.`;
+      status = t("Pause {time}", { time: dur(elapsed) }); cls = "tr-status-warn";
+      sub = t("Pausiert seit {time}. Aufnahme läuft lokal weiter, der Bereich wird später herausgeschnitten.", { time: dur(elapsed - p.from) });
     } else {
-      status = `Aufnahme läuft ${dur(elapsed)}`; cls = "tr-status-error";
+      status = t("Aufnahme läuft {time}", { time: dur(elapsed) }); cls = "tr-status-error";
       const paused = (ep.pauses || []).reduce((a, p) => a + ((p.to ?? elapsed) - p.from), 0);
-      if (paused > 0) sub = `davon Pause ${dur(paused)}`;
+      if (paused > 0) sub = t("davon Pause {time}", { time: dur(paused) });
     }
   } else if (ep.status === "uploading") {
-    status = "Aufnahme beendet"; sub = "Spuren werden hochgeladen";
+    status = t("Aufnahme beendet"); sub = t("Spuren werden hochgeladen");
   } else {
-    status = S.socket && S.socket.connected ? "Bereit" : "Verbindet";
-    sub = isHost ? "Aufnahme starten, sobald alle da sind" : "Der Host startet die Aufnahme";
+    status = S.socket && S.socket.connected ? t("Bereit") : t("Verbindet");
+    sub = isHost ? t("Aufnahme starten, sobald alle da sind") : t("Der Host startet die Aufnahme");
   }
-  if (S.muted && ep.status === "recording") sub = "Stumm: Die eigene Spur nimmt Stille auf" + (sub ? `. ${sub}` : "");
+  if (S.muted && ep.status === "recording") sub = sub ? t("Stumm: Die eigene Spur nimmt Stille auf. {sub}", { sub }) : t("Stumm: Die eigene Spur nimmt Stille auf");
   setText(UI.status, status);
   UI.status.className = "ps-status " + cls;
   setText(UI.statusSub, sub);
@@ -842,14 +843,14 @@ function renderBar() {
       const b = [];
       if (ep.status === "recording") {
         b.push(ep.paused
-          ? h("button", { class: "tr-btn tr-btn-secondary", type: "button", id: "ps-resume", onclick: () => ctl({ type: "rec.resume" }) }, icon("play"), "Weiter")
-          : h("button", { class: "tr-btn tr-btn-secondary", type: "button", id: "ps-pause", onclick: () => ctl({ type: "rec.pause" }) }, icon("pause"), "Pause"));
-        b.push(h("button", { class: "tr-btn tr-btn-secondary", type: "button", id: "ps-stop", onclick: () => UI.dialog.showModal() }, icon("square"), "Beenden"));
+          ? h("button", { class: "tr-btn tr-btn-secondary", type: "button", id: "ps-resume", onclick: () => ctl({ type: "rec.resume" }) }, icon("play"), t("Weiter"))
+          : h("button", { class: "tr-btn tr-btn-secondary", type: "button", id: "ps-pause", onclick: () => ctl({ type: "rec.pause" }) }, icon("pause"), t("Pause")));
+        b.push(h("button", { class: "tr-btn tr-btn-secondary", type: "button", id: "ps-stop", onclick: () => UI.dialog.showModal() }, icon("square"), t("Beenden")));
       } else if (ep.status === "uploading") {
-        b.push(h("span", { class: "ps-small" }, "Neue Aufnahme, sobald alle Spuren oben sind"));
+        b.push(h("span", { class: "ps-small" }, t("Neue Aufnahme, sobald alle Spuren oben sind")));
         b.push(discardButton(ep.id));
       } else {
-        b.push(h("button", { class: "tr-btn tr-btn-primary", type: "button", id: "ps-start", onclick: () => ctl({ type: "rec.start" }) }, icon("circle"), "Aufnahme starten"));
+        b.push(h("button", { class: "tr-btn tr-btn-primary", type: "button", id: "ps-start", onclick: () => ctl({ type: "rec.start" }) }, icon("circle"), t("Aufnahme starten")));
       }
       fill(UI.controls, b);
     }
@@ -860,7 +861,7 @@ function renderBar() {
 function renderUpload() {
   const R = S.recorder;
   const st = R.status();
-  const recovered = [...R.tracks.values()].some((t) => t.recovered && !t.done);
+  const recovered = [...R.tracks.values()].some((track) => track.recovered && !track.done);
   const show = !!S.stopped || recovered || (ROLE === "host" && S.room && S.room.episode.status === "uploading");
   UI.upload.hidden = !show;
   if (!show) return;
@@ -872,19 +873,20 @@ function renderUpload() {
   UI.uploadKey = key;
   if (own) {
     const pct = total > 0 ? Math.min(100, (done / total) * 100) : 0;
+    const amounts = { done: dur((done / st.sr) * 1000), total: dur((total / st.sr) * 1000) };
     fill(UI.upload,
-      h("p", { class: "ps-upload-title tr-status-warn" }, "Upload läuft, Fenster offen lassen"),
+      h("p", { class: "ps-upload-title tr-status-warn" }, t("Upload läuft, Fenster offen lassen")),
       h("div", { class: "ps-progress", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": pct.toFixed(0) }, h("span", { style: `width:${pct.toFixed(1)}%` })),
-      h("p", { class: "ps-small" }, `${dur((done / st.sr) * 1000)} von ${dur((total / st.sr) * 1000)} hochgeladen` + (st.retrying ? ". Netz gestört, neuer Versuch läuft" : "")));
+      h("p", { class: "ps-small" }, (st.retrying ? t("{done} von {total} hochgeladen. Netz gestört, neuer Versuch läuft", amounts) : t("{done} von {total} hochgeladen", amounts))));
   } else if (others > 0) {
     fill(UI.upload,
-      h("p", { class: "ps-upload-title tr-status-ok" }, "Eigene Spur vollständig hochgeladen"),
-      h("p", { class: "ps-small" }, others === 1 ? "Ein Teilnehmer lädt noch hoch" : `${others} Teilnehmer laden noch hoch`));
+      h("p", { class: "ps-upload-title tr-status-ok" }, t("Eigene Spur vollständig hochgeladen")),
+      h("p", { class: "ps-small" }, others === 1 ? t("Ein Teilnehmer lädt noch hoch") : t("{n} Teilnehmer laden noch hoch", { n: others })));
   } else {
     const epId = S.stopped && S.stopped.episodeId;
     fill(UI.upload,
-      h("p", { class: "ps-upload-title tr-status-ok", id: "ps-done" }, "Fertig, Fenster kann geschlossen werden"),
-      ROLE === "host" && epId ? h("div", { class: "ps-upload-actions" }, h("a", { href: `/episodes/${epId}`, id: "ps-episode-link" }, "Zur Folge"), discardButton(epId)) : null);
+      h("p", { class: "ps-upload-title tr-status-ok", id: "ps-done" }, t("Fertig, Fenster kann geschlossen werden")),
+      ROLE === "host" && epId ? h("div", { class: "ps-upload-actions" }, h("a", { href: `/episodes/${epId}`, id: "ps-episode-link" }, t("Zur Folge")), discardButton(epId)) : null);
   }
 }
 
@@ -898,24 +900,24 @@ function peersPending() {
   return n;
 }
 
-function setText(el, t) { if (el.textContent !== t) el.textContent = t; }
+function setText(el, text) { if (el.textContent !== text) el.textContent = text; }
 
 function renderSelf() {
   if (!UI.muteBtn) return;
-  fill(UI.muteBtn, icon(S.muted ? "mic-off" : "mic"), S.muted ? "Stummschaltung aufheben" : "Stummschalten");
+  fill(UI.muteBtn, icon(S.muted ? "mic-off" : "mic"), S.muted ? t("Stummschaltung aufheben") : t("Stummschalten"));
   UI.muteBtn.setAttribute("aria-pressed", S.muted ? "true" : "false");
   UI.muteNote.hidden = !S.muted;
-  fill(UI.camBtn, icon(S.cam ? "video-off" : "video"), S.cam ? "Kamera aus" : "Kamera an");
+  fill(UI.camBtn, icon(S.cam ? "video-off" : "video"), S.cam ? t("Kamera aus") : t("Kamera an"));
   UI.camBtn.setAttribute("aria-pressed", S.cam ? "true" : "false");
   UI.hpSel.value = S.headphones ? "1" : "0";
   if (UI.liveMute) {
     fill(UI.liveMute, icon(S.muted ? "mic-off" : "mic"));
-    UI.liveMute.setAttribute("aria-label", S.muted ? "Stummschaltung aufheben" : "Stummschalten");
-    UI.liveMute.title = S.muted ? "Stummschaltung aufheben" : "Stummschalten";
+    UI.liveMute.setAttribute("aria-label", S.muted ? t("Stummschaltung aufheben") : t("Stummschalten"));
+    UI.liveMute.title = S.muted ? t("Stummschaltung aufheben") : t("Stummschalten");
     UI.liveMute.setAttribute("aria-pressed", S.muted ? "true" : "false");
     fill(UI.liveCam, icon(S.cam ? "video-off" : "video"));
-    UI.liveCam.setAttribute("aria-label", S.cam ? "Kamera aus" : "Kamera an");
-    UI.liveCam.title = S.cam ? "Kamera aus" : "Kamera an";
+    UI.liveCam.setAttribute("aria-label", S.cam ? t("Kamera aus") : t("Kamera an"));
+    UI.liveCam.title = S.cam ? t("Kamera aus") : t("Kamera an");
     UI.liveCam.setAttribute("aria-pressed", S.cam ? "true" : "false");
   }
   if (S.camStream) { if (UI.selfVideo.srcObject !== S.camStream) UI.selfVideo.srcObject = S.camStream; }
@@ -942,30 +944,30 @@ function renderStage() {
   const seen = new Set();
   let prev = null;
   for (const w of want) {
-    let t = UI.tiles.get(w.id);
-    if (!t) {
-      t = { big: h("span", { class: "ps-tile-big" }), name: h("span", {}), mute: h("span", { class: "tr-status-warn" }, "stumm") };
-      t.tag = h("p", { class: "ps-tile-tag" }, t.name, t.mute);
-      t.el = h("div", { class: "ps-tile" }, t.big, t.tag);
-      UI.tiles.set(w.id, t);
+    let tile = UI.tiles.get(w.id);
+    if (!tile) {
+      tile = { big: h("span", { class: "ps-tile-big" }), name: h("span", {}), mute: h("span", { class: "tr-status-warn" }, t("stumm")) };
+      tile.tag = h("p", { class: "ps-tile-tag" }, tile.name, tile.mute);
+      tile.el = h("div", { class: "ps-tile" }, tile.big, tile.tag);
+      UI.tiles.set(w.id, tile);
     }
     seen.add(w.id);
-    t.el.classList.toggle("is-self", w.self);
-    t.el.classList.toggle("is-off", !w.video);
-    const cur = t.el.querySelector("video");
+    tile.el.classList.toggle("is-self", w.self);
+    tile.el.classList.toggle("is-off", !w.video);
+    const cur = tile.el.querySelector("video");
     if (cur && cur !== w.video) cur.remove();
-    if (w.video && w.video.parentNode !== t.el) { t.el.prepend(w.video); w.video.play().catch(() => {}); }
-    setText(t.big, w.name);
-    t.big.hidden = !!w.video;
-    setText(t.name, w.name);
-    t.name.hidden = !w.video; // ohne Bild steht der Name schon groß in der Kachel
-    t.mute.hidden = !w.muted;
-    t.tag.hidden = !w.video && !w.muted;
+    if (w.video && w.video.parentNode !== tile.el) { tile.el.prepend(w.video); w.video.play().catch(() => {}); }
+    setText(tile.big, w.name);
+    tile.big.hidden = !!w.video;
+    setText(tile.name, w.name);
+    tile.name.hidden = !w.video; // ohne Bild steht der Name schon groß in der Kachel
+    tile.mute.hidden = !w.muted;
+    tile.tag.hidden = !w.video && !w.muted;
     const next = prev ? prev.nextSibling : UI.stage.firstChild;
-    if (next !== t.el) UI.stage.insertBefore(t.el, next);
-    prev = t.el;
+    if (next !== tile.el) UI.stage.insertBefore(tile.el, next);
+    prev = tile.el;
   }
-  for (const [id, t] of [...UI.tiles]) if (!seen.has(id)) { t.el.remove(); UI.tiles.delete(id); }
+  for (const [id, tile] of [...UI.tiles]) if (!seen.has(id)) { tile.el.remove(); UI.tiles.delete(id); }
   const on = want.some((w) => w.video);
   UI.stage.dataset.others = String(Math.min(others, 3));
   UI.stage.dataset.self = S.camStream ? "1" : "0";
@@ -973,6 +975,9 @@ function renderStage() {
   UI.root.classList.toggle("has-stage", on);
 }
 
+// Verbindungsgüte: intern bleiben die deutschen Werte aus rtc.js, angezeigt wird die Übersetzung
+const QUALITY_TEXT = { gut: () => t("gut"), mittel: () => t("mittel"), schwach: () => t("schwach"), getrennt: () => t("getrennt"), "kein Ton": () => t("kein Ton"), verbindet: () => t("verbindet") };
+const qualityText = (q) => (QUALITY_TEXT[q] ? QUALITY_TEXT[q]() : q);
 const QUALITY_CLASS = { gut: "tr-status-ok", mittel: "tr-status-warn", schwach: "tr-status-error", getrennt: "tr-status-error", "kein Ton": "tr-status-warn" };
 
 function renderPeers() {
@@ -983,27 +988,27 @@ function renderPeers() {
     const self = p.id === S.me.id;
     const conn = self ? null : S.mesh.peers.get(p.id);
     const facts = [];
-    if (!p.connected) facts.push(h("span", { class: "tr-status-error" }, "nicht verbunden"));
-    if (p.connected && !p.mic) facts.push(h("span", { class: "tr-status-warn" }, "stumm"));
-    facts.push(p.headphones ? "Kopfhörer" : "ohne Kopfhörer");
-    if (isHost || self) facts.push(p.device === "mobile" ? "Handy oder Tablet" : "Computer");
-    if (conn && p.connected) facts.push(h("span", { class: QUALITY_CLASS[conn.quality] || "" }, `Verbindung ${conn.quality}`));
+    if (!p.connected) facts.push(h("span", { class: "tr-status-error" }, t("nicht verbunden")));
+    if (p.connected && !p.mic) facts.push(h("span", { class: "tr-status-warn" }, t("stumm")));
+    facts.push(p.headphones ? t("Kopfhörer") : t("ohne Kopfhörer"));
+    if (isHost || self) facts.push(p.device === "mobile" ? t("Handy oder Tablet") : t("Computer"));
+    if (conn && p.connected) facts.push(h("span", { class: QUALITY_CLASS[conn.quality] || "" }, t("Verbindung {quality}", { quality: qualityText(conn.quality) })));
     const pr = S.progress.get(p.id);
     let up = null;
     if (pr && pr.track_id && (isHost || self)) {
       const sr = 48000; // Anzeige: Server meldet Frames; alle Spuren laufen mit 48 kHz, sonst nur leicht ungenau
       const rec = pr.recorded_frames || 0, upl = pr.uploaded_frames || 0;
       const complete = pr.status === "complete" || pr.status === "assembled";
-      up = h("span", { class: complete ? "tr-status-ok" : "" }, complete ? "Upload vollständig" : `Upload ${dur((upl / sr) * 1000)} von ${dur((Math.max(rec, upl) / sr) * 1000)}`);
+      up = h("span", { class: complete ? "tr-status-ok" : "" }, complete ? t("Upload vollständig") : t("Upload {done} von {total}", { done: dur((upl / sr) * 1000), total: dur((Math.max(rec, upl) / sr) * 1000) }));
     }
     if (up) facts.push(up);
     const fillEl = h("span", { class: "ps-meter-fill", "data-meter": p.id });
     const dbEl = h("span", { class: "ps-meter-db", "data-meter-db": p.id }, "–");
-    const clipEl = h("span", { class: "ps-meter-clip tr-status-error", "data-clip": p.id, hidden: true }, "Übersteuert");
+    const clipEl = h("span", { class: "ps-meter-clip tr-status-error", "data-clip": p.id, hidden: true }, t("Übersteuert"));
     const li = h("li", { class: "ps-peer" + (p.connected ? "" : " is-away"), "data-peer": p.id },
       h("div", { class: "ps-peer-body" },
-        h("p", { class: "ps-peer-name" }, h("span", {}, p.name), h("span", { class: "ps-peer-role" }, self ? "dieses Gerät" : p.role === "host" ? "Host" : "Gast")),
-        h("div", { class: "ps-meter", role: "meter", "aria-label": `Pegel ${p.name}` }, h("span", { class: "ps-meter-track" }, fillEl), dbEl),
+        h("p", { class: "ps-peer-name" }, h("span", {}, p.name), h("span", { class: "ps-peer-role" }, self ? t("dieses Gerät") : p.role === "host" ? t("Host") : t("Gast"))),
+        h("div", { class: "ps-meter", role: "meter", "aria-label": t("Pegel {name}", { name: p.name }) }, h("span", { class: "ps-meter-track" }, fillEl), dbEl),
         clipEl,
         h("p", { class: "ps-peer-facts" }, facts.flatMap((f, i) => (i ? [" · ", f] : [f])))));
     const m = self ? S.localMeter : S.peerMeter.get(p.id);
@@ -1024,25 +1029,25 @@ function renderLiveBox(list) {
     const dbEl = h("span", { class: "ps-meter-db", "data-lmeter-db": p.id }, "–");
     const m = p.id === S.me.id ? S.localMeter : S.peerMeter.get(p.id);
     if (m) applyMeter(fillEl, dbEl, null, m);
-    return h("div", { class: "ps-meter", role: "meter", "aria-label": `Pegel ${p.name}` }, h("span", { class: "ps-meter-name" }, p.name), h("span", { class: "ps-meter-track" }, fillEl), dbEl);
+    return h("div", { class: "ps-meter", role: "meter", "aria-label": t("Pegel {name}", { name: p.name }) }, h("span", { class: "ps-meter-name" }, p.name), h("span", { class: "ps-meter-track" }, fillEl), dbEl);
   });
   for (const p of list) {
     const self = p.id === S.me.id;
     const conn = self ? null : S.mesh.peers.get(p.id);
-    if (!p.connected) { issues.push([`${p.name}: nicht verbunden`, "tr-status-error"]); continue; }
-    if (!p.mic) issues.push([`${p.name}: stumm`, "tr-status-warn"]);
-    if (conn && (conn.quality === "schwach" || conn.quality === "getrennt")) issues.push([`${p.name}: Verbindung ${conn.quality}`, "tr-status-error"]);
-    if (conn && conn.quality === "kein Ton") issues.push([`${p.name}: kein Ton`, "tr-status-warn"]);
+    if (!p.connected) { issues.push([t("{name}: nicht verbunden", { name: p.name }), "tr-status-error"]); continue; }
+    if (!p.mic) issues.push([t("{name}: stumm", { name: p.name }), "tr-status-warn"]);
+    if (conn && (conn.quality === "schwach" || conn.quality === "getrennt")) issues.push([t("{name}: Verbindung {quality}", { name: p.name, quality: qualityText(conn.quality) }), "tr-status-error"]);
+    if (conn && conn.quality === "kein Ton") issues.push([t("{name}: kein Ton", { name: p.name }), "tr-status-warn"]);
     const m = self ? S.localMeter : S.peerMeter.get(p.id);
-    if (m && m.clipAt && performance.now() - m.clipAt < 2500) issues.push([`${p.name}: übersteuert`, "tr-status-error"]);
+    if (m && m.clipAt && performance.now() - m.clipAt < 2500) issues.push([t("{name}: übersteuert", { name: p.name }), "tr-status-error"]);
     const pr = S.progress.get(p.id);
     const lag = pr && pr.track_id ? ((pr.recorded_frames || 0) - (pr.uploaded_frames || 0)) / 48000 : 0;
-    if (lag > 30) issues.push([`${p.name}: Upload ${Math.round(lag)} s zurück`, "tr-status-warn"]);
+    if (lag > 30) issues.push([t("{name}: Upload {s} s zurück", { name: p.name, s: Math.round(lag) }), "tr-status-warn"]);
   }
   fill(UI.liveMeters, rows);
   fill(UI.liveState, issues.length
     ? issues.flatMap(([text, cls], i) => (i ? [" · ", h("span", { class: cls }, text)] : [h("span", { class: cls }, text)]))
-    : h("span", {}, "Verbindung gut, alle Spuren laden mit"));
+    : h("span", {}, t("Verbindung gut, alle Spuren laden mit")));
 }
 
 function updateMeter(id, m) {
@@ -1076,12 +1081,12 @@ function renderBoard() {
   if (key !== UI.boardKey) {
     UI.boardKey = key;
     if (!sounds.length) {
-      fill(UI.board, h("p", { class: "ps-empty" }, "Noch keine Sounds. ", h("a", { href: "/sounds" }, "Soundboard einrichten")));
+      fill(UI.board, h("p", { class: "ps-empty" }, t("Noch keine Sounds."), " ", h("a", { href: "/sounds" }, t("Soundboard einrichten"))));
     } else {
-      fill(UI.board, sounds.map((s) => h("button", { type: "button", class: "ps-sound" + (isNext(s) ? " is-next" : ""), "data-sound": s.id, disabled: locked, title: locked ? "In der Pause gesperrt" : null, onclick: () => playSound(s) },
+      fill(UI.board, sounds.map((s) => h("button", { type: "button", class: "ps-sound" + (isNext(s) ? " is-next" : ""), "data-sound": s.id, disabled: locked, title: locked ? t("In der Pause gesperrt") : null, onclick: () => playSound(s) },
         h("span", { class: "ps-key" + (s.hotkey ? "" : " is-empty") }, s.hotkey || ""),
         h("span", { class: "ps-sound-label" }, s.label),
-        h("span", { class: "ps-sound-dur" }, S.jingles.failed.has(s.id) ? "nicht geladen" : isNext(s) ? "als Nächstes dran" : dur(s.duration_ms)))));
+        h("span", { class: "ps-sound-dur" }, S.jingles.failed.has(s.id) ? t("nicht geladen") : isNext(s) ? t("als Nächstes dran") : dur(s.duration_ms)))));
     }
   }
   renderRunning();
@@ -1094,11 +1099,11 @@ function renderRunning() {
   if (key === UI.runningKey) return;
   UI.runningKey = key;
   fill(UI.running, list.map((r) => {
-    const s = soundById(r.sound_id) || { label: "Sound", fade_out_ms: 400 };
+    const s = soundById(r.sound_id) || { label: t("Sound"), fade_out_ms: 400 };
     return h("li", { class: "ps-run" },
       h("span", { class: "ps-run-label" }, s.label),
-      h("span", { class: "ps-run-left" }, r.stopping ? "blendet aus" : `noch ${dur(r.left + 999)}`),
-      r.stopping ? null : h("button", { type: "button", class: "tr-btn tr-btn-secondary ps-run-stop", onclick: () => ctl({ type: "sound.stop", event_id: r.event_id, fade_ms: s.fade_out_ms ?? 400 }) }, icon("volume-x"), "Ausblenden"));
+      h("span", { class: "ps-run-left" }, r.stopping ? t("blendet aus") : t("noch {time}", { time: dur(r.left + 999) })),
+      r.stopping ? null : h("button", { type: "button", class: "tr-btn tr-btn-secondary ps-run-stop", onclick: () => ctl({ type: "sound.stop", event_id: r.event_id, fade_ms: s.fade_out_ms ?? 400 }) }, icon("volume-x"), t("Ausblenden")));
   }));
 }
 

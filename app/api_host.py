@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 
-from . import core, cover, jobs, publishing, soundproc, util
+from . import core, cover, i18n, jobs, publishing, soundproc, util
 from .api_p import serve_sound
 from .auth import host_guard
 from .errors import ApiError
@@ -262,12 +262,18 @@ class FormatPatch(BaseModel):
         default=None, min_length=1, max_length=12)
 
 
+class UiPatch(BaseModel):
+    """Sprache der Oberfläche dieser Installation."""
+    language: Literal["de", "en"] | None = None
+
+
 class SettingsPatch(BaseModel):
     show: ShowPatch | None = None
     audio: AudioPatch | None = None
     assist: AssistPatch | None = None
     profile: ProfilePatch | None = None
     format: FormatPatch | None = None
+    ui: UiPatch | None = None
 
 
 async def _refresh_feed(st) -> None:
@@ -275,7 +281,7 @@ async def _refresh_feed(st) -> None:
     try:
         await asyncio.to_thread(publishing.refresh_feed, st.db, st.cfg)
     except publishing.PublishError as exc:
-        raise ApiError(502, "storage", f"Gespeichert, aber der Feed ließ sich nicht aktualisieren: {exc}") from exc
+        raise ApiError(502, "storage", "Gespeichert, aber der Feed ließ sich nicht aktualisieren: {detail}", detail=exc) from exc
 
 
 @router.get("/settings")
@@ -289,16 +295,23 @@ async def settings_put(body: SettingsPatch, request: Request) -> dict:
     st = _st(request)
     cur = core.get_settings(st.db, st.cfg)
     if body.show:
-        st.db.set_setting("show", {**cur["show"], **body.show.model_dump(exclude_unset=True, exclude_none=True)})
+        patch = body.show.model_dump(exclude_unset=True, exclude_none=True)
+        merged = {**cur["show"], **patch}
+        if "title" not in patch and "title" not in st.db.get_setting("show", {}):
+            merged.pop("title", None)  # der Standardtitel folgt der Sprache der Oberfläche, solange er nicht gespeichert ist
+        st.db.set_setting("show", merged)
     if body.audio:
         st.db.set_setting("audio", {**cur["audio"], **body.audio.model_dump(exclude_unset=True, exclude_none=True)})
+    if body.ui and body.ui.language:
+        st.db.set_setting("ui", {"language": body.ui.language})
     if body.profile:
         patch = {k: v.strip() for k, v in body.profile.model_dump(exclude_unset=True, exclude_none=True).items()}
         st.db.set_setting("profile", {**cur["profile"], **patch})
     if body.format:
         fmt = body.format.model_dump(exclude_unset=True, exclude_none=True)
+        stored = st.db.get_setting("format", {})  # nur Gespeichertes fortschreiben: Standardnamen folgen der Sprache
         new = {**cur["format"], **{k: v for k, v in fmt.items() if k != "labels"}}
-        new["labels"] = {**cur["format"]["labels"], **{k: v.strip() for k, v in (fmt.get("labels") or {}).items() if v.strip()}}
+        new["labels"] = {**(stored.get("labels") or {}), **{k: v.strip() for k, v in (fmt.get("labels") or {}).items() if v.strip()}}
         st.db.set_setting("format", new)
         st.room.companion.set_plan_format()
         await _room_update(request)
@@ -359,13 +372,14 @@ def _files(cfg, ep_id: str) -> dict:
 @router.get("/episodes")
 def episodes_list(request: Request) -> list[dict]:
     st = _st(request)
+    lang = i18n.ui_lang(st.db)
     running = {j["episode_id"]: j for j in st.db.all(
         "SELECT * FROM jobs WHERE status IN ('queued','running') AND episode_id IS NOT NULL ORDER BY created_at")}
     out = []
     for r in st.db.all("SELECT * FROM episodes ORDER BY COALESCE(published_at, publish_at, created_at) DESC"):
         item = episode_item(r)
         j = running.get(r["id"])
-        item["job"] = job_progress(j) if j else None
+        item["job"] = job_progress(j, lang) if j else None
         out.append(item)
     return out
 
@@ -378,8 +392,9 @@ def episode_item(r: dict) -> dict:
     return item
 
 
-def job_progress(j: dict) -> dict:
-    return {"id": j["id"], "kind": j["kind"], "status": j["status"], "progress": j["progress"], "message": j["message"]}
+def job_progress(j: dict, lang: str = "de") -> dict:
+    return {"id": j["id"], "kind": j["kind"], "status": j["status"], "progress": j["progress"],
+            "message": i18n.tr(lang, j["message"]) if j["message"] else j["message"]}
 
 
 @router.get("/episodes/{episode_id}")
@@ -393,10 +408,13 @@ def episode_get(episode_id: str, request: Request) -> dict:
         t.update(core.track_progress(st.db, t))
         t["has_raw"] = (st.cfg.episode_dir(episode_id) / "tracks" / t["id"] / "raw.flac").exists()
     out["events"] = core.events_of(st.db, episode_id)
-    out["jobs"] = [jobs.job_public(j, with_log=False) for j in
+    out["jobs"] = [jobs.job_public(j, with_log=False, lang=i18n.ui_lang(st.db)) for j in
                    st.db.all("SELECT * FROM jobs WHERE episode_id=? ORDER BY created_at DESC LIMIT 10", (episode_id,))]
     out["chapters_preview"] = core.chapters_preview(st.db, ep)
     out["files"] = _files(st.cfg, episode_id)
+    if isinstance(out.get("report"), dict) and out["report"].get("warnings"):  # Warnungen der Pipeline stehen deutsch in der Datenbank
+        lang = i18n.ui_lang(st.db)
+        out["report"] = {**out["report"], "warnings": [i18n.tr(lang, w) for w in out["report"]["warnings"]]}
     return out
 
 
@@ -438,7 +456,7 @@ def episode_patch(episode_id: str, body: EpisodePatch, request: Request) -> dict
         dup = st.db.one("SELECT id FROM episodes WHERE number=? AND id!=? AND COALESCE(season,0)=COALESCE(?,0)",
                         (fields["number"], episode_id, fields.get("season", ep["season"])))
         if dup:
-            raise ApiError(409, "number_taken", f"Die Folgennummer {fields['number']} ist schon vergeben")
+            raise ApiError(409, "number_taken", "Die Folgennummer {number} ist schon vergeben", number=fields["number"])
     if body.edl is not None:
         fields["edl"] = core.normalize_edl(body.edl.model_dump())
     if body.chapter_titles is not None:
@@ -492,9 +510,9 @@ async def episode_discard(episode_id: str, request: Request, body: DiscardBody |
         raise ApiError(409, "bad_state", "Verwerfen geht nur nach der Aufnahme, während der Verarbeitung, in der Prüfung oder nach einem Fehler")
     plan, other = core.discard_plan_target(st.db, ep)
     if plan == "conflict" and not (body and body.drop_plan):
-        why = ("Gerade läuft schon eine neue Aufnahme" if other["status"] != "draft"
-               else "Der neue Entwurf hat schon einen eigenen Sendeplan")
-        raise ApiError(409, "plan_conflict", f"{why}. Der Sendeplan dieser Aufnahme lässt sich deshalb nicht übernehmen und würde mit gelöscht")
+        if other["status"] != "draft":
+            raise ApiError(409, "plan_conflict", "Gerade läuft schon eine neue Aufnahme. Der Sendeplan dieser Aufnahme lässt sich deshalb nicht übernehmen und würde mit gelöscht")
+        raise ApiError(409, "plan_conflict", "Der neue Entwurf hat schon einen eigenen Sendeplan. Der Sendeplan dieser Aufnahme lässt sich deshalb nicht übernehmen und würde mit gelöscht")
     runner = request.app.state.runner
     try:
         if not await runner.cancel_episode(episode_id):
@@ -660,7 +678,7 @@ def job_get(job_id: str, request: Request) -> dict:
     j = _st(request).db.one("SELECT * FROM jobs WHERE id=?", (job_id,))
     if j is None:
         raise ApiError(404, "job_not_found", "Aufgabe nicht gefunden")
-    return jobs.job_public(j)
+    return jobs.job_public(j, lang=i18n.ui_lang(_st(request).db))
 
 
 @router.get("/feed/preview")

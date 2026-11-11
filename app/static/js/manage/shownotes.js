@@ -1,5 +1,5 @@
 // Schlichter Editor für Shownotes. Erlaubt sind nur p, br, a, ul, ol, li, strong, em (wie publish/sanitize.py).
-import { button, h, safeUrl } from "./common.js";
+import { button, h, safeUrl, t } from "./common.js";
 
 const KEEP = new Set(["P", "BR", "A", "UL", "OL", "LI", "STRONG", "EM"]);
 const RENAME = { B: "STRONG", I: "EM", DIV: "P", H1: "P", H2: "P", H3: "P", H4: "P", H5: "P", H6: "P" };
@@ -68,12 +68,12 @@ function askLink(initial) {
       resolve(v);
     };
     const form = h("form", { onsubmit: (e) => { e.preventDefault(); done(input.value.trim()); } },
-      h("h2", { id: "m-link-title", class: "m-dialog-title" }, "Link einfügen"),
-      h("div", { class: "tr-field m-field" }, h("label", { class: "tr-label", for: "m-link-url" }, "Adresse"), input),
+      h("h2", { id: "m-link-title", class: "m-dialog-title" }, t("Link einfügen")),
+      h("div", { class: "tr-field m-field" }, h("label", { class: "tr-label", for: "m-link-url" }, t("Adresse")), input),
       h("div", { class: "app-row m-dialog-actions" },
-        button("Einfügen", { variant: "primary", small: false, type: "submit" }),
-        button("Link entfernen", { small: false, onclick: () => done("") }),
-        button("Abbrechen", { small: false, onclick: () => done(null) })));
+        button(t("Einfügen"), { variant: "primary", small: false, type: "submit" }),
+        button(t("Link entfernen"), { small: false, onclick: () => done("") }),
+        button(t("Abbrechen"), { small: false, onclick: () => done(null) })));
     dlg.append(form);
     dlg.addEventListener("cancel", (e) => { e.preventDefault(); done(null); });
     document.body.append(dlg);
@@ -88,18 +88,18 @@ export class ShownotesEditor {
     this.source = false;
     this.area = h("div", {
       class: "m-rte tr-input", contenteditable: "true", role: "textbox", "aria-multiline": "true",
-      "aria-label": "Shownotes", "data-placeholder": "Shownotes eingeben",
+      "aria-label": t("Shownotes"), "data-placeholder": t("Shownotes eingeben"),
     });
-    this.text = h("textarea", { class: "tr-input m-rte-source", hidden: true, rows: 10, "aria-label": "Shownotes als HTML", spellcheck: "false" });
-    this.bar = h("div", { class: "m-rte-bar", role: "toolbar", "aria-label": "Formatierung" });
+    this.text = h("textarea", { class: "tr-input m-rte-source", hidden: true, rows: 10, "aria-label": t("Shownotes als HTML"), spellcheck: "false" });
+    this.bar = h("div", { class: "m-rte-bar", role: "toolbar", "aria-label": t("Formatierung") });
     const cmd = (label, command, title) =>
       button(label, { title, onclick: () => { this.area.focus(); document.execCommand(command, false, null); this._emit(); } });
-    this.btnSource = button("Quelltext", { onclick: () => this.toggleSource() });
+    this.btnSource = button(t("Quelltext"), { onclick: () => this.toggleSource() });
     this.btnSource.setAttribute("aria-pressed", "false");
     this.bar.append(
-      cmd("Fett", "bold", "Fett"), cmd("Kursiv", "italic", "Kursiv"),
-      button("Link", { onclick: () => this.link() }),
-      cmd("Liste", "insertUnorderedList", "Aufzählung"), cmd("Nummeriert", "insertOrderedList", "Nummerierte Liste"),
+      cmd(t("Fett"), "bold", t("Fett")), cmd(t("Kursiv"), "italic", t("Kursiv")),
+      button(t("Link"), { onclick: () => this.link() }),
+      cmd(t("Liste"), "insertUnorderedList", t("Aufzählung")), cmd(t("Nummeriert"), "insertOrderedList", t("Nummerierte Liste")),
       this.btnSource);
     this.el = h("div", { class: "m-rte-wrap" }, this.bar, this.area, this.text);
     this.area.addEventListener("input", () => this._emit());
@@ -107,7 +107,7 @@ export class ShownotesEditor {
       e.preventDefault();
       const html = e.clipboardData.getData("text/html");
       const plain = e.clipboardData.getData("text/plain");
-      const clean = html ? sanitizeHtml(html) : sanitizeHtml(plain.split(/\n{2,}/).map((t) => `<p>${t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\n/g, "<br>")}</p>`).join(""));
+      const clean = html ? sanitizeHtml(html) : sanitizeHtml(plain.split(/\n{2,}/).map((para) => `<p>${para.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\n/g, "<br>")}</p>`).join(""));
       document.execCommand("insertHTML", false, clean);
     });
     this.text.addEventListener("input", () => this.onChange?.());

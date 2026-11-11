@@ -8,7 +8,7 @@ import asyncio
 import logging
 from collections.abc import Callable
 
-from . import core, util
+from . import core, i18n, util
 
 log = logging.getLogger("podcast.companion")
 
@@ -75,6 +75,8 @@ class Companion:
         st["on"] = self.enabled()
         if self._message:
             st["message"] = self._message
+        if st.get("message"):  # Meldungen von Server und Sitzung sind deutsch; die Oberfläche bekommt ihre Sprache
+            st["message"] = i18n.tr(i18n.ui_lang(self.db), st["message"])
         return {k: st.get(k) for k in ("on", "stt", "ai", "lag_ms", "message")}
 
     def status_summary(self) -> dict:
@@ -100,7 +102,8 @@ class Companion:
         log.warning("Live-Begleiter: %s: %r", what, exc)
         try:
             await self.room.send_hosts({"type": "assist.status", **{**self.status(), "stt": "fehler",
-                                        "message": f"Der Live-Begleiter hatte einen Fehler ({what}). Die Aufnahme läuft weiter"}})
+                                        "message": i18n.tr(i18n.ui_lang(self.db),
+                                                           f"Der Live-Begleiter hatte einen Fehler ({what}). Die Aufnahme läuft weiter")}})
         except Exception:  # noqa: BLE001
             pass
 
@@ -144,7 +147,7 @@ class Companion:
             session = self.factory(
                 rec_start_server_ms=rec_start, on_line=self._on_line, on_card=self._on_card, on_status=self._on_status,
                 on_said=self._on_said,
-                work_dir=self.cfg.episode_dir(episode_id) / "work", show=show,
+                work_dir=self.cfg.episode_dir(episode_id) / "work", show=show, language=show["language"],
                 host_name=core.host_first_name(self.db), server_clock=util.now_ms)
             if self.episode_id != episode_id:
                 self._said = []

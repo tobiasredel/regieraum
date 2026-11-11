@@ -1,7 +1,7 @@
 // Schnittansicht: Wellenform der ungeschnittenen Mischung (Canvas aus peaks.json), Abspielen aus audio/mix.
 // Zeiten in Sitzungszeit (ms). Zeigt Kapitelmarken, Sound-Ereignisse, bestehende Schnitte (schraffiert), Trimmgriffe,
 // markiert Bereiche per Ziehen oder Tasten (I, O), schneidet heraus, macht rückgängig, hört über Schnitte hinweg vor.
-import { button, clear, fmtClock, fmtDuration, h, icon } from "./common.js";
+import { button, clear, fmtClock, fmtDuration, h, icon, t } from "./common.js";
 import * as E from "./edl.js";
 
 const TICKS_S = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200];
@@ -61,51 +61,51 @@ export class CutEditor {
 
   // --- Aufbau -------------------------------------------------------------------------------
   _build() {
-    const play = (this.btnPlay = button("Abspielen", { icon: "play", onclick: () => this.toggle(), title: "Abspielen und Anhalten (Leertaste)" }));
-    this.readout = h("p", { class: "m-ed-time m-num", "aria-label": "Position und Länge" });
+    const play = (this.btnPlay = button(t("Abspielen"), { icon: "play", onclick: () => this.toggle(), title: t("Abspielen und Anhalten (Leertaste)") }));
+    this.readout = h("p", { class: "m-ed-time m-num", "aria-label": t("Position und Länge") });
     this.skipBox = h("input", { type: "checkbox", id: "m-ed-skip", checked: true });
     this.skipBox.addEventListener("change", () => (this.skip = this.skipBox.checked));
     const transport = h("div", { class: "m-ed-bar" },
       play,
-      button("−5 s", { onclick: () => this.seek(this.pos - 5000), ariaLabel: "5 Sekunden zurück", title: "5 Sekunden zurück (Pfeil links)" }),
-      button("+5 s", { onclick: () => this.seek(this.pos + 5000), ariaLabel: "5 Sekunden vor", title: "5 Sekunden vor (Pfeil rechts)" }),
+      button("−5 s", { onclick: () => this.seek(this.pos - 5000), ariaLabel: t("5 Sekunden zurück"), title: t("5 Sekunden zurück (Pfeil links)") }),
+      button("+5 s", { onclick: () => this.seek(this.pos + 5000), ariaLabel: t("5 Sekunden vor"), title: t("5 Sekunden vor (Pfeil rechts)") }),
       this.readout,
-      h("label", { class: "m-check m-ed-skip", for: "m-ed-skip" }, this.skipBox, h("span", null, "Geschnittene Bereiche überspringen")));
+      h("label", { class: "m-check m-ed-skip", for: "m-ed-skip" }, this.skipBox, h("span", null, t("Geschnittene Bereiche überspringen"))));
 
-    this.main = h("canvas", { class: "m-ed-main", role: "img", "aria-label": "Wellenform der ungeschnittenen Mischung" });
+    this.main = h("canvas", { class: "m-ed-main", role: "img", "aria-label": t("Wellenform der ungeschnittenen Mischung") });
     this.stage = h("div", { class: "m-ed-stage", tabindex: "0", "aria-describedby": "m-ed-keys" }, this.main);
     this.over = h("canvas", { class: "m-ed-over", "aria-hidden": "true" });
 
-    this.btnIn = button("Beginn setzen", { onclick: () => this.markIn(), title: "Beginn des Bereichs an der Abspielposition (I)" });
-    this.btnOut = button("Ende setzen", { onclick: () => this.markOut(), title: "Ende des Bereichs an der Abspielposition (O)" });
-    this.btnHear = button("Übergang hören", { icon: "play", onclick: () => this.hearSelection(), title: "Vorhören mit herausgeschnittenem Bereich" });
-    this.btnCut = button("Herausschneiden", { icon: "scissors", onclick: () => this.cutSelection(), title: "Markierten Bereich herausschneiden (Entf)" });
-    this.btnRemove = button("Schnitt entfernen", { onclick: () => this.removeSelectedCut(), title: "Gewählten Schnitt entfernen (Entf)" });
-    this.btnUndo = button("Rückgängig", { icon: "undo", onclick: () => this.undo(), title: "Letzte Änderung zurücknehmen (Strg+Z)" });
+    this.btnIn = button(t("Beginn setzen"), { onclick: () => this.markIn(), title: t("Beginn des Bereichs an der Abspielposition (I)") });
+    this.btnOut = button(t("Ende setzen"), { onclick: () => this.markOut(), title: t("Ende des Bereichs an der Abspielposition (O)") });
+    this.btnHear = button(t("Übergang hören"), { icon: "play", onclick: () => this.hearSelection(), title: t("Vorhören mit herausgeschnittenem Bereich") });
+    this.btnCut = button(t("Herausschneiden"), { icon: "scissors", onclick: () => this.cutSelection(), title: t("Markierten Bereich herausschneiden (Entf)") });
+    this.btnRemove = button(t("Schnitt entfernen"), { onclick: () => this.removeSelectedCut(), title: t("Gewählten Schnitt entfernen (Entf)") });
+    this.btnUndo = button(t("Rückgängig"), { icon: "undo", onclick: () => this.undo(), title: t("Letzte Änderung zurücknehmen (Strg+Z)") });
     const tools = h("div", { class: "m-ed-bar m-ed-tools" },
-      h("div", { class: "m-ed-group", role: "group", "aria-label": "Zoom" },
-        button("", { icon: "zoomOut", ariaLabel: "Verkleinern", title: "Verkleinern (Minus)", onclick: () => this.zoomBy(0.5) }),
-        button("", { icon: "zoomIn", ariaLabel: "Vergrößern", title: "Vergrößern (Plus)", onclick: () => this.zoomBy(2) }),
-        button("Alles", { icon: "fit", title: "Ganze Aufnahme zeigen", onclick: () => this.fit() })),
-      h("div", { class: "m-ed-group", role: "group", "aria-label": "Bereich markieren" }, this.btnIn, this.btnOut, this.btnHear, this.btnCut),
-      h("div", { class: "m-ed-group", role: "group", "aria-label": "Änderungen" }, this.btnRemove, this.btnUndo));
+      h("div", { class: "m-ed-group", role: "group", "aria-label": t("Zoom") },
+        button("", { icon: "zoomOut", ariaLabel: t("Verkleinern"), title: t("Verkleinern (Minus)"), onclick: () => this.zoomBy(0.5) }),
+        button("", { icon: "zoomIn", ariaLabel: t("Vergrößern"), title: t("Vergrößern (Plus)"), onclick: () => this.zoomBy(2) }),
+        button(t("Alles"), { icon: "fit", title: t("Ganze Aufnahme zeigen"), onclick: () => this.fit() })),
+      h("div", { class: "m-ed-group", role: "group", "aria-label": t("Bereich markieren") }, this.btnIn, this.btnOut, this.btnHear, this.btnCut),
+      h("div", { class: "m-ed-group", role: "group", "aria-label": t("Änderungen") }, this.btnRemove, this.btnUndo));
 
     this.summary = h("p", { class: "m-ed-summary", "aria-live": "polite" });
     this.cutsList = h("div", { class: "m-ed-cuts" });
     const k = (...keys) => keys.map((x) => h("kbd", { class: "app-kbd" }, x));
     const pair = (keys, text) => h("li", null, h("span", { class: "m-keys-caps" }, keys), h("span", null, text));
     this.keys = h("div", { id: "m-ed-keys", class: "tr-small m-hint" },
-      h("ul", { class: "m-keys", "aria-label": "Tasten" },
-        pair(k("Leertaste"), "Abspielen"),
-        pair(k("←", "→"), "5 Sekunden"),
-        pair(k("Umschalt", "←", "→"), "1 Sekunde"),
-        pair(k("I", "O"), "Beginn und Ende setzen"),
-        pair(k("Entf"), "Herausschneiden oder Schnitt entfernen"),
-        pair(k("Strg", "Z"), "Rückgängig"),
-        pair(k("+", "−"), "Zoom")),
-      h("p", null, "Ziehen markiert einen Bereich, die senkrechten Griffe an Anfang und Ende trimmen"));
+      h("ul", { class: "m-keys", "aria-label": t("Tasten") },
+        pair(k(t("Leertaste")), t("Abspielen")),
+        pair(k("←", "→"), t("5 Sekunden")),
+        pair(k(t("Umschalt"), "←", "→"), t("1 Sekunde")),
+        pair(k("I", "O"), t("Beginn und Ende setzen")),
+        pair(k(t("Entf")), t("Herausschneiden oder Schnitt entfernen")),
+        pair(k(t("Strg"), "Z"), t("Rückgängig")),
+        pair(k("+", "−"), t("Zoom"))),
+      h("p", null, t("Ziehen markiert einen Bereich, die senkrechten Griffe an Anfang und Ende trimmen")));
     this.audio = h("audio", { preload: "auto", src: this.o.audioUrl });
-    this.audioError = h("p", { class: "tr-error", role: "alert", hidden: true }, "Die Mischung lässt sich nicht abspielen. Die Wellenform steht trotzdem zum Schneiden bereit.");
+    this.audioError = h("p", { class: "tr-error", role: "alert", hidden: true }, t("Die Mischung lässt sich nicht abspielen. Die Wellenform steht trotzdem zum Schneiden bereit."));
 
     this.el = h("div", { class: "m-editor" }, transport, this.stage, this.over, tools, this.summary, this.audioError, this.cutsList, this.keys, this.audio);
   }
@@ -362,7 +362,7 @@ export class CutEditor {
       ctx.lineTo(x + 0.5, bottom + 4);
       ctx.stroke();
       ctx.setLineDash([]);
-      this._label(ctx, "Beginn", x + 4, bottom - 8, c.ink);
+      this._label(ctx, t("Beginn"), x + 4, bottom - 8, c.ink);
     }
     // Auswahlkanten
     if (this.sel) {
@@ -667,10 +667,10 @@ export class CutEditor {
 
   // --- Tastatur -----------------------------------------------------------------------------
   _key(e) {
-    const t = e.target;
-    const inField = t instanceof HTMLElement && (t.closest("input, textarea, select, [contenteditable='true']") || (t.closest("button, summary, a") && e.key === " "));
+    const el = e.target;
+    const inField = el instanceof HTMLElement && (el.closest("input, textarea, select, [contenteditable='true']") || (el.closest("button, summary, a") && e.key === " "));
     if (inField) return;
-    if (t instanceof HTMLElement && t.closest("dialog")) return;
+    if (el instanceof HTMLElement && el.closest("dialog")) return;
     if (e.ctrlKey || e.metaKey) {
       if (e.key.toLowerCase() === "z" && !e.shiftKey) {
         e.preventDefault();
@@ -747,32 +747,32 @@ export class CutEditor {
     let ms = this.pos;
     if (!preview && ms >= E.endOf(this.edl, this.total) - 50) ms = this.edl.trim_start_ms;
     if (skip) {
-      const t = E.skipTarget(this.edl, ms, this.total, preview?.extra || []);
-      if (t === Infinity) ms = this.edl.trim_start_ms;
-      else ms = t;
+      const target = E.skipTarget(this.edl, ms, this.total, preview?.extra || []);
+      if (target === Infinity) ms = this.edl.trim_start_ms;
+      else ms = target;
     }
     this.audio.currentTime = ms / 1000;
     this.pos = ms;
     const p = this.audio.play();
     if (p && p.catch) p.catch(() => (this.audioError.hidden = false));
     this.playing = true;
-    this.btnPlay.replaceChildren(icon("pause"), document.createTextNode("Anhalten"));
+    this.btnPlay.replaceChildren(icon("pause"), document.createTextNode(t("Anhalten")));
     cancelAnimationFrame(this.raf);
     const loop = () => {
       if (!this.playing || this.destroyed) return;
       let ms2 = this.audio.currentTime * 1000;
       const pv = this.preview;
       if (this.skip || pv?.skip) {
-        const t = E.skipTarget(this.edl, ms2, this.total, pv?.extra || []);
-        if (t === Infinity) {
+        const target = E.skipTarget(this.edl, ms2, this.total, pv?.extra || []);
+        if (target === Infinity) {
           this.pause();
           this.pos = E.endOf(this.edl, this.total);
           this.draw();
           return;
         }
-        if (t > ms2 + 1) {
-          this.audio.currentTime = t / 1000;
-          ms2 = t;
+        if (target > ms2 + 1) {
+          this.audio.currentTime = target / 1000;
+          ms2 = target;
         }
       }
       if (pv && ms2 >= pv.endAt) {
@@ -806,7 +806,7 @@ export class CutEditor {
     this.playing = false;
     this.preview = null;
     cancelAnimationFrame(this.raf);
-    this.btnPlay.replaceChildren(icon("play"), document.createTextNode("Abspielen"));
+    this.btnPlay.replaceChildren(icon("play"), document.createTextNode(t("Abspielen")));
     this.pos = this.audio.currentTime * 1000;
     this._updateReadout();
     this.draw();
@@ -854,7 +854,7 @@ export class CutEditor {
     } else if (this.sel && this.pos > this.sel.from + E.MIN_CUT_MS) {
       this.sel = { from: this.sel.from, to: Math.round(this.pos) };
     } else {
-      this._say("Zuerst den Beginn setzen");
+      this._say(t("Zuerst den Beginn setzen"));
     }
     this.draw();
     this._updateAll();
@@ -868,14 +868,14 @@ export class CutEditor {
     this.sel = null;
     this.selCut = -1;
     this._changed();
-    this._say(`Bereich ${fmtClock(from)} bis ${fmtClock(to)} herausgeschnitten`);
+    this._say(t("Bereich {from} bis {to} herausgeschnitten", { from: fmtClock(from), to: fmtClock(to) }));
   }
 
   removeSelectedCut() {
     if (this.selCut < 0) return;
     const c = this.edl.cuts[this.selCut];
     this.removeCutAt(this.selCut);
-    this._say(`Schnitt ${fmtClock(c.from_ms)} bis ${fmtClock(c.to_ms)} entfernt`);
+    this._say(t("Schnitt {from} bis {to} entfernt", { from: fmtClock(c.from_ms), to: fmtClock(c.to_ms) }));
   }
 
   removeCutAt(i) {
@@ -892,7 +892,7 @@ export class CutEditor {
     this.sel = null;
     this.selCut = -1;
     this._changed();
-    this._say("Letzte Änderung zurückgenommen");
+    this._say(t("Letzte Änderung zurückgenommen"));
   }
 
   _changed() {
@@ -928,7 +928,7 @@ export class CutEditor {
   }
 
   _updateReadout() {
-    this.readout.textContent = `${fmtClock(this.pos, true)} von ${fmtClock(this.total)}`;
+    this.readout.textContent = t("{pos} von {total}", { pos: fmtClock(this.pos, true), total: fmtClock(this.total) });
   }
 
   _updateAll() {
@@ -945,9 +945,9 @@ export class CutEditor {
     }
     const dur = E.editedDuration(this.edl, this.total);
     const bits = [];
-    if (this.sel) bits.push(`Auswahl ${fmtClock(this.sel.from, true)} bis ${fmtClock(this.sel.to, true)}, ${fmtDuration(this.sel.to - this.sel.from) || "unter 1 s"}`);
-    else if (this.markA !== null) bits.push(`Beginn bei ${fmtClock(this.markA, true)}, Ende noch setzen`);
-    const info = `Folge nach dem Schnitt: ${fmtClock(dur)}, ungeschnitten ${fmtClock(this.total)}`;
+    if (this.sel) bits.push(t("Auswahl {from} bis {to}, {duration}", { from: fmtClock(this.sel.from, true), to: fmtClock(this.sel.to, true), duration: fmtDuration(this.sel.to - this.sel.from) || t("unter 1 s") }));
+    else if (this.markA !== null) bits.push(t("Beginn bei {time}, Ende noch setzen", { time: fmtClock(this.markA, true) }));
+    const info = t("Folge nach dem Schnitt: {edited}, ungeschnitten {total}", { edited: fmtClock(dur), total: fmtClock(this.total) });
     clear(this.summary);
     if (bits.length) this.summary.append(h("span", { class: "m-ed-sel" }, bits.join(". ") + ". "));
     this.summary.append(h("span", { class: "m-num" }, info));
@@ -957,13 +957,13 @@ export class CutEditor {
   _renderCuts() {
     const cuts = this.edl.cuts;
     const trims = [];
-    if (this.edl.trim_start_ms > 0) trims.push(`Anfang bis ${fmtClock(this.edl.trim_start_ms, true)} getrimmt`);
-    if (this.edl.trim_end_ms != null) trims.push(`Ende ab ${fmtClock(this.edl.trim_end_ms, true)} getrimmt`);
+    if (this.edl.trim_start_ms > 0) trims.push(t("Anfang bis {time} getrimmt", { time: fmtClock(this.edl.trim_start_ms, true) }));
+    if (this.edl.trim_end_ms != null) trims.push(t("Ende ab {time} getrimmt", { time: fmtClock(this.edl.trim_end_ms, true) }));
     clear(this.cutsList);
-    this.cutsList.append(h("h3", { class: "m-h3" }, `Schnitte (${cuts.length})`));
+    this.cutsList.append(h("h3", { class: "m-h3" }, t("Schnitte ({n})", { n: cuts.length })));
     if (trims.length) this.cutsList.append(h("p", { class: "tr-small m-trims" }, trims.join(", ")));
     if (!cuts.length) {
-      this.cutsList.append(h("p", { class: "tr-small" }, "Keine Schnitte. Bereich markieren und herausschneiden."));
+      this.cutsList.append(h("p", { class: "tr-small" }, t("Keine Schnitte. Bereich markieren und herausschneiden.")));
       return;
     }
     const ul = h("ul", { class: "m-ed-cutlist" });
@@ -979,12 +979,12 @@ export class CutEditor {
             this.seek(c.from_ms);
             this._updateAll();
           },
-        }, `${fmtClock(c.from_ms, true)} bis ${fmtClock(c.to_ms, true)}`),
-        h("span", { class: "tr-small m-num" }, fmtDuration(c.to_ms - c.from_ms) || "unter 1 s"),
-        pause ? h("span", { class: "tr-tag" }, "Pause") : null,
+        }, t("{from} bis {to}", { from: fmtClock(c.from_ms, true), to: fmtClock(c.to_ms, true) })),
+        h("span", { class: "tr-small m-num" }, fmtDuration(c.to_ms - c.from_ms) || t("unter 1 s")),
+        pause ? h("span", { class: "tr-tag" }, t("Pause")) : null,
         h("span", { class: "m-spacer" }),
-        button("Übergang hören", { onclick: () => this.hearRange(c.from_ms, c.to_ms) }),
-        button("Entfernen", { onclick: () => this.removeCutAt(i), ariaLabel: `Schnitt ${fmtClock(c.from_ms)} entfernen` })));
+        button(t("Übergang hören"), { onclick: () => this.hearRange(c.from_ms, c.to_ms) }),
+        button(t("Entfernen"), { onclick: () => this.removeCutAt(i), ariaLabel: t("Schnitt {time} entfernen", { time: fmtClock(c.from_ms) }) })));
     });
     this.cutsList.append(ul);
   }

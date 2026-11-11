@@ -1,14 +1,14 @@
 {% extends "_layout.html" %}
 {% set active = "sounds" %}
-{% block title %}Soundboard{% endblock %}
+{% block title %}{{ t("Soundboard") }}{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/css/manage.css?v={{ v }}">{% endblock %}
 {% block content %}
 <div class="m-page">
-  <p class="tr-eyebrow mit-punkt">Einrichtung</p>
-  <h1 class="m-h1">Soundboard</h1>
+  <p class="tr-eyebrow mit-punkt">{{ t("Einrichtung") }}</p>
+  <h1 class="m-h1">{{ t("Soundboard") }}</h1>
   <div id="app">
-    <p class="tr-small">Wird geladen</p>
-    <noscript><p>Diese Seite braucht JavaScript</p></noscript>
+    <p class="tr-small">{{ t("Wird geladen") }}</p>
+    <noscript><p>{{ t("Diese Seite braucht JavaScript") }}</p></noscript>
   </div>
 </div>
 {% endblock %}

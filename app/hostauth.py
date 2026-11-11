@@ -12,7 +12,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse, Response
 from starlette.requests import Request as StarletteRequest
 
-from . import util
+from . import i18n, util
 from .config import Config
 from .errors import error_body
 
@@ -148,16 +148,21 @@ class HostAuthMiddleware:
         is_api = path.startswith("/api/")
         if not self.auth.configured:
             if is_api:
-                resp = _json(503, error_body("setup", SETUP_MESSAGE))
+                resp = _json(503, error_body("setup", i18n.tr(_lang(scope), SETUP_MESSAGE)))
             else:
                 resp = _login_page(StarletteRequest(scope), setup=True)
         elif is_api:
-            resp = _json(401, error_body("unauthorized", "Bitte anmelden"))
+            resp = _json(401, error_body("unauthorized", i18n.tr(_lang(scope), "Bitte anmelden")))
         else:
             qs = scope.get("query_string", b"").decode("latin-1")
             target = path + ("?" + qs if qs else "")
             resp = RedirectResponse("/login?next=" + quote(target, safe=""), status_code=303)
         await resp(scope, receive, send)
+
+
+def _lang(scope) -> str:
+    app = scope.get("app")
+    return i18n.ui_lang(getattr(getattr(app, "state", None), "db", None))
 
 
 def _json(status: int, body: dict) -> Response:
@@ -167,7 +172,8 @@ def _json(status: int, body: dict) -> Response:
 
 def _login_page(request: Request, *, setup: bool = False, error: str = "", next_: str = "", status: int = 200):
     from .pages import render
-    resp = render(request, "login.html", "Anmelden", setup=setup, error=error, next=next_)
+    resp = render(request, "login.html", "Anmelden", setup=setup, error=i18n.tr(_lang(request.scope), error) if error else "",
+                  next=next_)
     resp.status_code = 503 if setup else status
     resp.headers["cache-control"] = "no-store"
     return resp

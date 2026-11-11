@@ -1,5 +1,5 @@
 {% extends "_base.html" %}
-{% block title %}Beitreten{% endblock %}
+{% block title %}{{ t("Beitreten") }}{% endblock %}
 {% block head %}<link rel="stylesheet" href="/static/css/studio.css?v={{ v }}">{% endblock %}
 {% block body %}
 <header class="tr-header">
@@ -9,9 +9,9 @@
 </header>
 <main class="ps-guest-page">
   <div id="ps-app" class="ps-app" data-role="guest" data-invite="{{ token }}">
-    <h1>Beitreten</h1>
-    <p class="ps-lead">Wird geladen</p>
-    <noscript><p class="ps-error">Das Studio braucht JavaScript</p></noscript>
+    <h1>{{ t("Beitreten") }}</h1>
+    <p class="ps-lead">{{ t("Wird geladen") }}</p>
+    <noscript><p class="ps-error">{{ t("Das Studio braucht JavaScript") }}</p></noscript>
   </div>
 </main>
 {% endblock %}

@@ -47,7 +47,7 @@ function measure() {
     await page.goto(L.BASE + url);
     await page.waitForSelector("h1");
     await page.waitForTimeout(1200);
-    if (url.startsWith("/episodes/")) { await page.click("summary:has-text('Transkript')"); await page.waitForSelector(".m-tr-list"); }
+    if (url.startsWith("/episodes/")) { await page.click("summary:has-text('Transkript'), summary:has-text('Transcript')"); await page.waitForSelector(".m-tr-list"); }
     const seen = new Map();
     let n = 0;
     for (let w = 360; w <= 1920; w += 8) {

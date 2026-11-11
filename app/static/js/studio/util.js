@@ -1,5 +1,8 @@
 // Kleine Hilfen für das Studio: DOM, Zahlen- und Zeitformat, Icons, API-Aufrufe.
 
+const V = new URL(import.meta.url).search;
+const { t, LOCALE } = await import(`../i18n.js${V}`);
+
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
@@ -63,8 +66,8 @@ export function icon(name, extraClass = "") {
 }
 
 // ---- Format ----
-const nf1 = new Intl.NumberFormat("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-const nf0 = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 0 });
+const nf1 = new Intl.NumberFormat(LOCALE, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const nf0 = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 });
 export const num1 = (x) => nf1.format(x);
 export const num0 = (x) => nf0.format(x);
 
@@ -100,14 +103,14 @@ export async function api(method, url, { token, body, headers, signal, raw } = {
     r = await fetch(url, { method, headers: hd, body: payload, signal, cache: "no-store" });
   } catch (e) {
     if (e && e.name === "AbortError") throw e;
-    throw new ApiError(0, "network", "Keine Verbindung zum Server");
+    throw new ApiError(0, "network", t("Keine Verbindung zum Server"));
   }
   if (raw) return r;
   let data = null;
   try { data = await r.json(); } catch { /* kein JSON */ }
   if (!r.ok) {
     const err = (data && data.error) || {};
-    throw new ApiError(r.status, err.code || "http_" + r.status, err.message || `Fehler ${r.status}`);
+    throw new ApiError(r.status, err.code || "http_" + r.status, err.message || t("Fehler {status}", { status: r.status }));
   }
   return data;
 }

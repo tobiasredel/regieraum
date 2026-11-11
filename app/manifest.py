@@ -5,7 +5,7 @@ import datetime as dt
 import json
 from pathlib import Path
 
-from . import core, util
+from . import core, i18n, util
 from .config import Config
 from .db import DB
 
@@ -62,15 +62,17 @@ def build(db: DB, cfg: Config, episode_id: str) -> dict:
             "fade_ms": (st["payload"].get("fade_ms") if st else None) or s["fade_out_ms"],
             "gain_db": s["gain_db"], "kind": s["kind"], "chapter_title": chapter,
         })
-    markers = [{"at_ms": e["server_ms"] - start, "label": e["payload"].get("label") or "Marker"}
+    marker_name = i18n.tr(i18n.ui_lang(db), "Marker")
+    markers = [{"at_ms": e["server_ms"] - start, "label": e["payload"].get("label") or marker_name}
                for e in events if e["kind"] == "marker"]
 
     show = settings["show"]
-    title = ep["title"] or (f"Folge {ep['number']}" if ep["number"] else "Neue Folge")
+    lang = i18n.show_lang(db)  # Sprache der Inhalte: Show-Sprache für Transkription und Dateikennzeichnung
+    title = ep["title"] or (i18n.tr(lang, "Folge {n}", n=ep["number"]) if ep["number"] else i18n.tr(lang, "Neue Folge"))
     cover = cfg.cover_dir / show["cover_key"] if show.get("cover_key") else None
     year = dt.datetime.fromtimestamp(start / 1000, dt.timezone.utc).year
     return {
-        "episode_id": episode_id, "work_dir": str(edir / "work"), "out_dir": str(edir / "out"),
+        "episode_id": episode_id, "language": lang, "work_dir": str(edir / "work"), "out_dir": str(edir / "out"),
         "rec_start_server_ms": start, "rec_stop_server_ms": stop,
         "tracks": tracks, "sounds": sounds, "markers": markers, "edl": ep["edl"], "audio": settings["audio"],
         "tags": {"title": title, "artist": show["author"], "album": show["title"], "track": ep["number"], "year": year,

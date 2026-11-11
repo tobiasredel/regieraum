@@ -108,7 +108,7 @@ export async function page(browser, name, opts = {}) {
 export async function enter(p, { name } = {}) {
   await p.waitForSelector("#ps-go", { timeout: 15000 });
   await p.click("#ps-go"); // Mikrofon freigeben
-  await p.waitForFunction(() => document.querySelector("#ps-go") && /betreten/.test(document.querySelector("#ps-go").textContent), null, { timeout: 15000 });
+  await p.waitForFunction(() => document.querySelector("#ps-go") && /betreten|enter|join/i.test(document.querySelector("#ps-go").textContent), null, { timeout: 15000 });
   if (name) await p.fill("#ps-name", name);
   await p.click("#ps-go");
   await p.waitForSelector(".ps-studio", { timeout: 15000 });

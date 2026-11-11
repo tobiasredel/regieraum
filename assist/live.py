@@ -36,7 +36,7 @@ import numpy as np
 from . import prompts
 from .llm import LLM, WEB_SEARCH_TOOL, AssistError, describe_error
 from .schemas import LIVE_CARD_SCHEMA, LOOKUP_SCHEMA, SUMMARY_SCHEMA
-from .util import (card_overlap, clip_text, content_words, near_duplicate_text, new_id, normalize_url, words)
+from .util import (card_overlap, clip_text, content_words, lang_code, near_duplicate_text, new_id, normalize_url, words)
 from .vad import Utterance, UtteranceCutter
 
 log = logging.getLogger("assist.live")
@@ -117,7 +117,7 @@ class LiveSession:
                  on_said: Callable | None = None, transcriber: Any = "env",
                  llm: LLM | None | str = "env", model: str | None = None, work_dir: str | Path | None = None,
                  server_clock: Callable[[], float] | None = None, show: dict | None = None,
-                 host_name: str = "der Host", config: LiveConfig | None = None):
+                 host_name: str = "der Host", config: LiveConfig | None = None, language: str | None = None):
         self.cfg = config or LiveConfig()
         self.server_clock = server_clock or (lambda: time.time() * 1000.0)
         self.rec_start = rec_start_server_ms if rec_start_server_ms is not None else self.server_clock()
@@ -125,12 +125,13 @@ class LiveSession:
         self.said: set[tuple[str, str, int]] = set()  # (Abschnitt, Art, Nr.) der im Gespräch gefallenen Dossier-Punkte
         self.model = model or os.environ.get("PS_AI_MODEL_LIVE") or DEFAULT_LIVE_MODEL
         self.show = show
+        self.language = lang_code(language or (show or {}).get("language"))  # Sprache der Show: Mitschrift, Prompts, Karten
         self.host_name = host_name
         self.work_dir = Path(work_dir) if work_dir else None
         if transcriber == "env":
             from .stt import from_env
             try:
-                transcriber = from_env()
+                transcriber = from_env(language=self.language)
             except AssistError:
                 transcriber = None
         self.transcriber = transcriber
@@ -254,7 +255,7 @@ class LiveSession:
 
     def set_plan(self, segments: list[dict]) -> None:
         self.plan = [dict(s) for s in segments or []]
-        self.plan_text = prompts.render_plan(self.plan, self.show)
+        self.plan_text = prompts.render_plan(self.plan, self._pshow)
         terms, urls = [], {}
         for s in self.plan:
             d = s.get("dossier") or {}
@@ -530,18 +531,28 @@ class LiveSession:
                 self._set_status(stt="ok", message="")
             self._flush_lines()
 
+    @property
+    def _pshow(self) -> dict:
+        """Show-Profil für die Prompts, mit der Sprache der Sitzung."""
+        return {**(self.show or {}), "language": self.language}
+
     def _stt_prompt(self, speaker: str) -> str:
         last = [l["text"] for l in self.lines[-3:]]
         show = self.show or {}
-        base = f"Deutschsprachiger Podcast „{show.get('title') or 'Podcast'}“" + (f" mit {show['hosts']}." if show.get("hosts") else ".")
+        title = show.get("title") or "Podcast"
+        if self.language == "de":
+            base = f"Deutschsprachiger Podcast „{title}“" + (f" mit {show['hosts']}." if show.get("hosts") else ".")
+        elif self.language == "en":
+            base = f"English-language podcast “{title}”" + (f" with {show['hosts']}." if show.get("hosts") else ".")
+        else:
+            base = f"Podcast “{title}” ({prompts.lang_name(self.language)})" + (f" – {show['hosts']}." if show.get("hosts") else ".")
         return (base + " " + " ".join(last))[-800:]
 
-    @staticmethod
-    def _clean_text(text: str, u: Utterance) -> str | None:
+    def _clean_text(self, text: str, u: Utterance) -> str | None:
         t = " ".join((text or "").split())
         if not t or not re.search(r"[A-Za-zÄÖÜäöüß0-9]", t):
             return None
-        if _HALLU.search(t) and len(words(t)) <= 12:
+        if patterns_for(self.language)[0].search(t) and len(words(t)) <= 12:
             return None
         # sehr kurze Äußerung mit langem Text ist fast immer erfunden
         if u.speech_ms < 600 and len(words(t)) > 8:
@@ -622,9 +633,10 @@ class LiveSession:
         self.stats.lines += 1
         self.lines.append({**line, "_utt": _UttRef(u)})
         self.chars_since_hint += len(p.text)
-        if _NUMBER.search(p.text):
+        _, unsure, number = patterns_for(self.language)
+        if number.search(p.text):
             self.number_pending = True
-        if _UNSURE.search(p.text):
+        if unsure.search(p.text):
             self.question_pending = True
         self._set_status(lag_ms=int(lag))
         if self._jsonl:
@@ -682,7 +694,7 @@ class LiveSession:
     def _system_blocks(self, task_system: str) -> list:
         # stabiler Präfix: Regeln + Show (immer gleich), dann Plan mit Dossiers (gleich bis set_plan)
         return [
-            {"type": "text", "text": task_system + "\n\n" + prompts.show_block(self.show)},
+            {"type": "text", "text": task_system + "\n\n" + prompts.show_block(self._pshow)},
             {"type": "text", "text": self.plan_text, "cache_control": {"type": "ephemeral"}},
         ]
 
@@ -731,9 +743,9 @@ class LiveSession:
                 lines = [_public(l) for l in self.lines[-6:]]
             user = prompts.live_user_message(mode=mode, current=current, segment_elapsed_ms=elapsed, now_ms=now,
                                              summary=self.summary, lines=lines, cards=self.cards,
-                                             host_name=self.host_name, show=self.show)
+                                             host_name=self.host_name, show=self._pshow)
             self.stats.hint_calls += 1
-            res = await self.llm.json_call(model=self.model, system=self._system_blocks(prompts.LIVE_SYSTEM),
+            res = await self.llm.json_call(model=self.model, system=self._system_blocks(prompts.live_system(self._pshow)),
                                            messages=[{"role": "user", "content": user}], schema=LIVE_CARD_SCHEMA,
                                            effort=self.cfg.hint_effort, max_tokens=3000,
                                            timeout=self.cfg.llm_timeout_s)
@@ -811,7 +823,9 @@ class LiveSession:
             self.stats.cards_rejected += 1
             return None
         answer = art == "antwort" and kind == "fakt"  # Antwort auf eine Wissenslücke
-        if mode == "check" and not (answer or (raw.get("text") or "").lstrip().lower().startswith("korrektur")):
+        starts = ("korrektur", prompts.correction_word(self.language).lower())  # „Korrektur“ oder das Wort der Show-Sprache
+        if mode == "check" and not (answer or art == "korrektur"
+                                    or (raw.get("text") or "").lstrip().lower().startswith(starts)):
             self.stats.cards_rejected += 1
             return None
         text = clip_text(raw.get("text") or "", TEXT_MAX)
@@ -866,7 +880,7 @@ class LiveSession:
             return
         self._summary_busy = True
         try:
-            res = await self.llm.json_call(model=self.model, system=[{"type": "text", "text": prompts.SUMMARY_SYSTEM}],
+            res = await self.llm.json_call(model=self.model, system=[{"type": "text", "text": prompts.summary_system(self._pshow)}],
                                            messages=[{"role": "user", "content": prompts.summary_user_message(
                                                self.summary, [_public(l) for l in backlog])}],
                                            schema=SUMMARY_SCHEMA, effort="low", max_tokens=3000,
@@ -896,9 +910,9 @@ class LiveSession:
         try:
             today = datetime.now(ZoneInfo("Europe/Berlin")).strftime("%Y-%m-%d")
             user = prompts.lookup_user_message(query, today, self._window(self.cfg.pulse_window_ms)[-6:],
-                                               self._segment(self.current_id), self.show)
+                                               self._segment(self.current_id), self._pshow)
             res = await self.llm.json_call(
-                model=self.model, system=[{"type": "text", "text": prompts.LOOKUP_SYSTEM}],
+                model=self.model, system=[{"type": "text", "text": prompts.lookup_system(self._pshow)}],
                 messages=[{"role": "user", "content": user}], schema=LOOKUP_SCHEMA, effort="low", max_tokens=4000,
                 tools=[{"type": WEB_SEARCH_TOOL, "name": "web_search", "max_uses": 1,
                         "user_location": {"type": "approximate", "country": "DE", "timezone": "Europe/Berlin"}}],
@@ -908,8 +922,8 @@ class LiveSession:
             key = normalize_url(data.get("quelle_url"))
             src = res.sources.get(key) if key else None
             text = data.get("text") or ""
-            if not src and not text.startswith("Nichts Belastbares"):
-                text = f"Nichts Belastbares gefunden: {query}"
+            if not src and not text.startswith(tuple(prompts.NOTHING_FOUND.values()) + (prompts.nothing_found(self.language),)):
+                text = f"{prompts.nothing_found(self.language)}: {query}"
                 data["detail"] = ""
             card = {"kind": "recherche", "text": text, "detail": data.get("detail") or "",
                     "quelle_url": src.url if src else None}
@@ -933,6 +947,36 @@ class LiveSession:
 
 
 _FLUSH = object()
+_HALLU_EN = re.compile(r"(subtitles? (by|in)|amara\.org|thank(s| you) for (watching|listening)|please subscribe|"
+                       r"subscribe to|like and subscribe|copyright|see you (in the )?next (time|episode|video)|"
+                       r"transcribed by|captions? by|www\.)", re.I)
+_UNSURE_EN = re.compile(
+    r"\b(how (many|much|high|big|large|long|old|far|tall|expensive)|since when|"
+    r"when (was|is|did|were|has|have|will)|who (was|is|has|did|were)|what (was|is) (it|that|the name)|"
+    r"what('s| is) it called|where (is|was|are|were)|what does .{1,30} (cost|mean)|"
+    r"i (don'?t|do not) (really )?know|no idea|not (really )?(sure|certain|exactly)|unsure|"
+    r"if i (remember|recall) (correctly|right)|off the top of (my|the) head|"
+    r"(look|check) (it|that|this) up|google|need to (check|look)|"
+    r"roughly|approximately|around about|something like|"
+    r"i (think|guess|believe|reckon|suppose),? (it|that|they|there|the)? ?(was|were|is|are|has|had)\b)", re.I)
+_NUMBER_EN = re.compile(r"\d|\b(hundred|thousand|million|billion|trillion|percent|per cent|euros?|dollars?|pounds?|"
+                        r"half|third|quarter|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|"
+                        r"forty|fifty|sixty|seventy|eighty|ninety)\b", re.I)
+_PATTERN_CACHE: dict[str, tuple] = {}
+
+
+def patterns_for(lang: str) -> tuple:
+    """(Halluzinationen der Mitschrift, Wissenslücke, Zahl) für die Sprache der Show. Deutsch und Englisch haben je ein
+    Muster; für andere Sprachen gelten beide zusammen."""
+    if lang not in _PATTERN_CACHE:
+        de, en = (_HALLU, _UNSURE, _NUMBER), (_HALLU_EN, _UNSURE_EN, _NUMBER_EN)
+        if lang == "de":
+            _PATTERN_CACHE[lang] = de
+        elif lang == "en":
+            _PATTERN_CACHE[lang] = en
+        else:
+            _PATTERN_CACHE[lang] = tuple(re.compile(f"(?:{a.pattern})|(?:{b.pattern})", re.I) for a, b in zip(de, en))
+    return _PATTERN_CACHE[lang]
 # Wissenslücke im Gesagten: Frage nach einer Tatsache oder hörbare Unsicherheit. Großzügig, denn das Modell entscheidet;
 # ein bloßes vorangestelltes „ich glaube, dass …“ (Meinung) zählt nicht.
 _UNSURE = re.compile(

@@ -1,6 +1,10 @@
 // Gemeinsame Bausteine der Verwaltungsseiten: API, DOM-Hilfen, Formate, Hinweise, Rückfragen, Icons.
 // Kein Framework, kein Build. Alle Texte werden über textContent gesetzt, nie als HTML.
 
+import { t, LANG, LOCALE } from "../i18n.js";
+
+export { t, LANG, LOCALE };
+
 const BASE = "/api/host";
 
 export class ApiError extends Error {
@@ -25,14 +29,14 @@ export async function api(path, { method = "GET", json, form, signal } = {}) {
     res = await fetch(BASE + path, init);
   } catch (e) {
     if (e.name === "AbortError") throw e;
-    throw new ApiError(0, "network", "Keine Verbindung zum Server");
+    throw new ApiError(0, "network", t("Keine Verbindung zum Server"));
   }
   if (res.status === 204) return null;
   const type = res.headers.get("content-type") || "";
   const body = type.includes("json") ? await res.json().catch(() => null) : await res.text().catch(() => "");
   if (!res.ok) {
     const err = body && typeof body === "object" ? body.error || {} : {};
-    throw new ApiError(res.status, err.code || "error", err.message || (typeof body === "string" && body.length < 200 && body) || `Fehler ${res.status}`);
+    throw new ApiError(res.status, err.code || "error", err.message || (typeof body === "string" && body.length < 200 && body) || t("Fehler {status}", { status: res.status }));
   }
   return body;
 }
@@ -116,17 +120,17 @@ export function button(label, { variant = "secondary", icon: ic, small = true, o
   return b;
 }
 
-// --- Formate (deutsch) -------------------------------------------------------------------------
-const NF0 = new Intl.NumberFormat("de-DE", { maximumFractionDigits: 0 });
-const NF1 = new Intl.NumberFormat("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-const DF = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
-const TF = new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit" });
+// --- Formate (nach Sprache der Oberfläche) -------------------------------------------------------------------------
+const NF0 = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 });
+const NF1 = new Intl.NumberFormat(LOCALE, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const DF = new Intl.DateTimeFormat(LOCALE, { day: "2-digit", month: "2-digit", year: "numeric" });
+const TF = new Intl.DateTimeFormat(LOCALE, { hour: "2-digit", minute: "2-digit" });
 
 export const fmtInt = (n) => NF0.format(n);
-export const fmtDec = (n, digits = 1) => (digits === 1 ? NF1.format(n) : new Intl.NumberFormat("de-DE", { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(n));
+export const fmtDec = (n, digits = 1) => (digits === 1 ? NF1.format(n) : new Intl.NumberFormat(LOCALE, { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(n));
 export const fmtDate = (ms) => (ms ? DF.format(new Date(ms)) : "");
 export const fmtTimeOfDay = (ms) => (ms ? TF.format(new Date(ms)) : "");
-export const fmtDateTime = (ms) => (ms ? `${fmtDate(ms)}, ${fmtTimeOfDay(ms)} Uhr` : "");
+export const fmtDateTime = (ms) => (ms ? t("{date}, {time} Uhr", { date: fmtDate(ms), time: fmtTimeOfDay(ms) }) : "");
 /** Minuszeichen statt Bindestrich. */
 export const signed = (n, digits = 1) => (n < 0 ? "−" : n > 0 ? "+" : "") + fmtDec(Math.abs(n), digits);
 export const neg = (n, digits = 1) => (n < 0 ? "−" : "") + fmtDec(Math.abs(n), digits);
@@ -141,7 +145,7 @@ export function fmtClock(ms, withTenths = false) {
   const mm = Math.floor((total % 3600) / 60);
   const ss = total % 60;
   let s = hh ? `${hh}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}` : `${mm}:${String(ss).padStart(2, "0")}`;
-  if (withTenths) s += "," + String(Math.floor((ms % 1000) / 100));
+  if (withTenths) s += (LANG === "en" ? "." : ",") + String(Math.floor((ms % 1000) / 100));
   return (neg_ ? "−" : "") + s;
 }
 
@@ -149,34 +153,35 @@ export function fmtClock(ms, withTenths = false) {
 export function fmtDuration(ms) {
   if (!Number.isFinite(ms) || ms <= 0) return "";
   const s = Math.round(ms / 1000);
-  if (s < 90) return `${s} s`;
+  if (s < 90) return t("{s} s", { s });
   const m = Math.round(s / 60);
-  if (m < 60) return `${m} min`;
+  if (m < 60) return t("{n} min", { n: m });
   const hh = Math.floor(m / 60);
   const mm = m % 60;
-  return mm ? `${hh} h ${mm} min` : `${hh} h`;
+  return mm ? t("{h} h {m} min", { h: hh, m: mm }) : t("{h} h", { h: hh });
 }
 
 export function fmtBytes(b) {
   if (!Number.isFinite(b)) return "";
-  if (b >= 1e9) return `${fmtDec(b / 1e9, 1)} GB`;
-  if (b >= 1e6) return `${fmtInt(b / 1e6)} MB`;
-  return `${fmtInt(b / 1e3)} kB`;
+  if (b >= 1e9) return t("{n} GB", { n: fmtDec(b / 1e9, 1) });
+  if (b >= 1e6) return t("{n} MB", { n: fmtInt(b / 1e6) });
+  return t("{n} kB", { n: fmtInt(b / 1e3) });
 }
 
 export const STATUS = {
-  draft: ["Entwurf", ""],
-  recording: ["Aufnahme läuft", "error"],
-  uploading: ["Upload läuft", "warn"],
-  processing: ["Wird verarbeitet", ""],
-  review: ["Zur Prüfung", "warn"],
-  scheduled: ["Geplant", ""],
-  published: ["Veröffentlicht", ""],
-  failed: ["Fehlgeschlagen", "error"],
+  draft: [() => t("Entwurf"), ""],
+  recording: [() => t("Aufnahme läuft"), "error"],
+  uploading: [() => t("Upload läuft"), "warn"],
+  processing: [() => t("Wird verarbeitet"), ""],
+  review: [() => t("Zur Prüfung"), "warn"],
+  scheduled: [() => t("Geplant"), ""],
+  published: [() => t("Veröffentlicht"), ""],
+  failed: [() => t("Fehlgeschlagen"), "error"],
 };
 
 export function statusText(status) {
-  return (STATUS[status] || [status, ""])[0];
+  const entry = STATUS[status];
+  return entry ? entry[0]() : status;
 }
 
 export function statusClass(status) {
@@ -209,11 +214,11 @@ export function toast(message, { error = false } = {}) {
 }
 
 export function errorText(e) {
-  return e && e.message ? e.message : "Unbekannter Fehler";
+  return e && e.message ? e.message : t("Unbekannter Fehler");
 }
 
 /** Rückfrage als Dialog. Liefert true bei Bestätigung. */
-export function confirmDialog({ title, text, ok = "Bestätigen", cancel = "Abbrechen", danger = false }) {
+export function confirmDialog({ title, text, ok = t("Bestätigen"), cancel = t("Abbrechen"), danger = false }) {
   return new Promise((resolve) => {
     const dlg = h("dialog", { class: "tr-modal m-dialog", "aria-labelledby": "m-dlg-title" });
     const done = (v) => {
@@ -235,6 +240,16 @@ export function confirmDialog({ title, text, ok = "Bestätigen", cancel = "Abbre
     document.body.append(dlg);
     dlg.showModal();
   });
+}
+
+/** Setzt Knoten in einen schon übersetzten Text mit {platzhaltern}: rich(übersetzterText, { link: knoten }). */
+export function rich(text, nodes) {
+  const out = [];
+  text.split(/\{(\w+)\}/).forEach((part, i) => {
+    if (i % 2) out.push(part in nodes ? nodes[part] : `{${part}}`);
+    else if (part) out.push(part);
+  });
+  return out;
 }
 
 /** Zwischenablage mit Ausweich über markiertes Feld. */
@@ -293,7 +308,7 @@ export function debounce(fn, ms = 700) {
 
 export function progressBar(value, label) {
   const pct = Math.max(0, Math.min(1, value || 0));
-  const bar = h("div", { class: "app-progress", role: "progressbar", "aria-valuemin": 0, "aria-valuemax": 100, "aria-valuenow": Math.round(pct * 100), "aria-label": label || "Fortschritt" });
+  const bar = h("div", { class: "app-progress", role: "progressbar", "aria-valuemin": 0, "aria-valuemax": 100, "aria-valuenow": Math.round(pct * 100), "aria-label": label || t("Fortschritt") });
   bar.append(h("span", { style: `width:${(pct * 100).toFixed(1)}%` }));
   return bar;
 }

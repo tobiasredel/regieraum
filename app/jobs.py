@@ -7,7 +7,7 @@ import logging
 import sys
 from pathlib import Path
 
-from . import core, manifest, ntfy, publishing, util
+from . import core, i18n, manifest, ntfy, publishing, util
 
 log = logging.getLogger("podcast.jobs")
 ROOT = Path(__file__).resolve().parent.parent
@@ -33,8 +33,11 @@ def enqueue(db, episode_id: str | None, kind: str, payload: dict | None = None, 
     return jid
 
 
-def job_public(j: dict, with_log: bool = True) -> dict:
+def job_public(j: dict, with_log: bool = True, lang: str = "de") -> dict:
+    """Job für die Oberfläche. Die Meldung steht deutsch in der Datenbank und wird erst hier in `lang` übersetzt,
+    damit ein Sprachwechsel sofort auch für ältere Jobs wirkt."""
     out = {k: j[k] for k in ("id", "episode_id", "kind", "status", "progress", "message", "created_at", "started_at", "finished_at")}
+    out["message"] = i18n.tr(lang, out["message"]) if out["message"] else out["message"]
     if with_log:
         out["log"] = (j["log"] or "")[-4000:]
     return out
@@ -207,12 +210,21 @@ class Runner:
     def _progress(self, job_id: str, progress: float, message: str = "") -> None:
         self.db.run("UPDATE jobs SET progress=?, message=? WHERE id=?", (max(0.0, min(1.0, progress)), message, job_id))
 
+    @property
+    def lang(self) -> str:
+        return i18n.ui_lang(self.db)
+
     async def _notify(self, title: str, message: str, priority: str, tags: str, episode_id: str | None) -> None:
+        """Der Titel ist ein deutscher Schlüssel und geht in der Sprache der Oberfläche raus; der Text ist schon fertig
+        (Folgentitel und übersetzte Meldung, daher hier nicht noch einmal durchs Wörterbuch)."""
         click = f"{self.cfg.base_url}/episodes/{episode_id}" if episode_id else None
-        await asyncio.to_thread(ntfy.send, self.cfg, title, message, priority, tags, click)
+        await asyncio.to_thread(ntfy.send, self.cfg, i18n.tr(self.lang, title), message, priority, tags, click)
 
     def _label(self, ep: dict) -> str:
-        return ep["title"] or (f"Folge {ep['number']}" if ep["number"] else "Neue Folge")
+        """Name der Folge für Benachrichtigungen; ohne Titel „Folge 3“ bzw. „Neue Folge“ in der Sprache der Oberfläche."""
+        if ep["title"]:
+            return ep["title"]
+        return i18n.tr(self.lang, "Folge {n}", n=ep["number"]) if ep["number"] else i18n.tr(self.lang, "Neue Folge")
 
     async def _failed(self, job: dict, message: str) -> None:
         ep_id = job["episode_id"]
@@ -222,7 +234,8 @@ class Runner:
         if ep and job["kind"] in ("process", "remix") and ep["status"] == "processing":
             core.update_episode(self.db, ep_id, status="failed")
         if job["kind"] in ("process", "remix", "publish") and ep:
-            await self._notify("Verarbeitung fehlgeschlagen", f"{self._label(ep)}: {message}", "high", "warning", ep_id)
+            await self._notify("Verarbeitung fehlgeschlagen", f"{self._label(ep)}: {i18n.tr(self.lang, message)}", "high",
+                               "warning", ep_id)
 
     # Pipeline als Unterprozess
     async def run_pipeline(self, job_id: str, stage: str, manifest_path: Path) -> None:
@@ -354,7 +367,7 @@ class Runner:
         ep = core.get_episode(self.db, ep_id)
         if ep and ep["status"] == "processing":
             core.update_episode(self.db, ep_id, status="review")
-            msg = self._label(ep) + (f" ({note})" if note else "")
+            msg = self._label(ep) + (f" ({i18n.tr(self.lang, note)})" if note else "")
             await self._notify("Folge zur Prüfung bereit", msg, "default", "microphone", ep_id)
 
     async def h_publish(self, job: dict) -> str:

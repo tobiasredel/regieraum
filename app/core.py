@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from . import util
+from . import i18n, util
 from .config import Config
 from .db import DB, seed_default_plan
 
@@ -51,10 +51,17 @@ def get_profile(db: DB) -> dict:
     return {**DEFAULT_PROFILE, **{k: v for k, v in db.get_setting("profile", {}).items() if k in DEFAULT_PROFILE}}
 
 
-def get_format(db: DB) -> dict:
+def default_labels(lang: str) -> dict:
+    """Standardnamen der Abschnittsarten in der Sprache `lang` (Deutsch ist die Quelle)."""
+    return {k: i18n.tr(lang, v) for k, v in DEFAULT_FORMAT["labels"].items()}
+
+
+def get_format(db: DB, lang: str | None = None) -> dict:
+    """Sendeformat. Namen, die nicht gespeichert sind, stehen in der Sprache der Oberfläche (`lang` überschreibt das,
+    z. B. für Prompts in der Sprache der Show); gespeicherte Namen bleiben unangetastet."""
     stored = db.get_setting("format", {})
-    labels = {**DEFAULT_FORMAT["labels"], **{k: v for k, v in (stored.get("labels") or {}).items()
-                                              if k in DEFAULT_FORMAT["labels"] and v}}
+    defaults = default_labels(lang or i18n.ui_lang(db))
+    labels = {**defaults, **{k: v for k, v in (stored.get("labels") or {}).items() if k in defaults and v}}
     from .db import PLAN_ENTRIES
 
     plan = [e for e in (stored.get("plan") or []) if e in PLAN_ENTRIES] or list(DEFAULT_FORMAT["plan"])
@@ -71,21 +78,25 @@ def kind_label(fmt: dict, kind: str | None, good_type: str | None = None) -> str
 def host_first_name(db: DB) -> str:
     """Rufname des Hosts: aus dem Show-Profil, sonst der erste Name des Inhabers, sonst „Host“."""
     name = get_profile(db)["host_name"] or (db.get_setting("show", {}).get("owner_name") or "")
-    return (name.split() or ["Host"])[0]
+    return (name.split() or [i18n.tr(i18n.ui_lang(db), "Host")])[0]
 
 
 def assist_show(db: DB, cfg: Config) -> dict:
-    """Show-Profil für Recherche, Begleiter und Shownotes (siehe assist.prompts.show_block)."""
+    """Show-Profil für Recherche, Begleiter und Shownotes (siehe assist.prompts.show_block). Inhalte folgen der Sprache der
+    Show (`language`, zweibuchstabig), nicht der der Oberfläche; auch die Standardnamen der Abschnittsarten."""
     show = get_settings(db, cfg)["show"]
-    return {"title": show["title"], "description": show["description"], "hosts": show["author"],
-            **get_profile(db), "format": get_format(db)}
+    lang = i18n.content_lang(show.get("language"))
+    return {"title": show["title"], "description": show["description"], "hosts": show["author"], "language": lang,
+            **get_profile(db), "format": get_format(db, lang)}
 
 
 def get_settings(db: DB, cfg: Config) -> dict:
-    show = {**DEFAULT_SHOW, "link": cfg.base_url, **db.get_setting("show", {})}
+    show = {**DEFAULT_SHOW, "title": i18n.tr(i18n.ui_lang(db), DEFAULT_SHOW["title"]), "link": cfg.base_url,
+            **db.get_setting("show", {})}
     audio = {**DEFAULT_AUDIO, **db.get_setting("audio", {})}
     assist = {"enabled": False, **db.get_setting("assist", {})}
-    return {"show": show, "audio": audio, "assist": assist, "profile": get_profile(db), "format": get_format(db)}
+    return {"show": show, "audio": audio, "assist": assist, "profile": get_profile(db), "format": get_format(db),
+            "ui": {"language": i18n.ui_lang(db)}}
 
 
 # --- Teilnehmer und Einladungen -----------------------------------------
@@ -110,7 +121,7 @@ def invite_active(inv: dict) -> bool:
 
 def ensure_permanent_invite(db: DB) -> None:
     if db.one("SELECT id FROM invites WHERE kind='permanent' LIMIT 1") is None:
-        create_invite(db, get_profile(db)["cohost_name"] or "Co-Host", "permanent")
+        create_invite(db, get_profile(db)["cohost_name"] or i18n.tr(i18n.ui_lang(db), "Co-Host"), "permanent")
 
 
 def create_invite(db: DB, label: str, kind: str) -> dict:
@@ -360,7 +371,7 @@ def chapters_preview(db: DB, ep: dict) -> list[dict]:
             default = chapter_default(s, e, segs, fmt)
             items.append((e, s["kind"], default, e["sound_id"]))
         elif e["kind"] == "marker":
-            items.append((e, "marker", e["payload"].get("label") or "Marker", None))
+            items.append((e, "marker", e["payload"].get("label") or i18n.tr(i18n.ui_lang(db), "Marker"), None))
     out, seen = [], set()
     for e, kind, default, sound_id in items:
         session_ms = e["server_ms"] - start
