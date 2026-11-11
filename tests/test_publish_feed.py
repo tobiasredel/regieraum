@@ -138,6 +138,12 @@ def test_absolute_urls_pass_through_and_legacy_fields():
     assert it.find("itunes:image", NS).get("href") == "https://pod.example.org/media/guid-1/image-ab.jpg"
 
 
+def test_own_episode_page_beats_imported_link():
+    ep = episode(1, legacy={"link": "https://old.example/ep1"})
+    it = parse(build_feed(show(), [ep], url_for=URL, episode_link=lambda e: f"https://pod.example.org/folgen/{e.guid}.html")).find("channel/item")
+    assert it.findtext("link") == "https://pod.example.org/folgen/guid-1.html"
+
+
 def test_feed_without_url_for_and_feed_url():
     xml = build_feed(show(cover_key="https://x/c.jpg", feed_url="https://own.example/feed.xml"), [episode(1, audio_key="https://x/a.mp3")])
     ch = parse(xml).find("channel")

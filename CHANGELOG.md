@@ -2,6 +2,13 @@
 
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Changed
+
+- With the show site on, every feed entry links to its own episode page, also for imported episodes that still
+  carried the link of their old host.
+
 ## [0.1.0] - 2026-11-11
 
 First public version.

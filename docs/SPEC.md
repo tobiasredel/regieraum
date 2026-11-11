@@ -614,9 +614,10 @@ ihr Thema. Sprache der Seite und `<html lang>` = `show.language`, Texte über `i
 Englisch). Unveränderte Seiten werden nicht erneut hochgeladen (Prüfsummen in `settings.site_pages`, gebunden an die
 Adresse des Speichers). Einstellungen `site = {enabled (Standard true), platforms}` (Name und http(s)-Adresse, höchstens 6;
 sonst 422); Abschalten löscht `index.html` und die Folgenseiten, Zurückziehen einer Folge ihre Seite. Der Feed-`link` (Show
-und Folgen ohne eigenen Link): Hat der Nutzer unter „Show“ eine Webseite gespeichert (anders als `PS_BASE_URL`, das die
+und Folgen): Hat der Nutzer unter „Show“ eine Webseite gespeichert (anders als `PS_BASE_URL`, das die
 Einstellungsseite als Vorgabe zeigt), gilt sie. Sonst zeigt `link` auf `storage.url("index.html")` und der `link` je Folge
-auf ihre Seite, solange die Seite an ist; ist sie aus, bleibt es bei `PS_BASE_URL`. Die Einstellungen nennen die Adresse
+auf ihre Seite, solange die Seite an ist, auch wenn eine importierte Folge noch den Link ihres alten Hosters hat;
+ist sie aus, gilt dieser importierte Link oder `PS_BASE_URL`. Die Einstellungen nennen die Adresse
 immer mit `index.html`, weil manche S3-Speicher (R2) unter `/` nichts ausliefern.
 
 Downloads zählen (Ergänzung 11.11.2026, Migration 5, Tabelle `downloads(day, episode_id, visitor)`, Primärschlüssel über

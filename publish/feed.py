@@ -63,7 +63,7 @@ def build_feed(show: Show, episodes: Iterable[FeedEpisode], *,
     Schlüssel schon absolute URLs sein. `feed_url` (sonst `show.feed_url`, sonst `url_for("feed.xml")`) erzeugt
     atom:link und podcast:guid. `enclosure_url` (Audioschlüssel -> Adresse) ersetzt `url_for` nur für die Audiodateien der
     Enclosures (Download-Zählung über die App oder einen Dienst, SPEC Abschnitt 10); Cover, Kapitel und Transkripte
-    bleiben unberührt. `episode_link` liefert die Adresse der Folgenseite für `link`, wenn die Folge keinen eigenen hat."""
+    bleiben unberührt. `episode_link` liefert die Adresse der Folgenseite für `link`; sie geht einem importierten Link der Folge vor."""
     def absu(v: str) -> str:
         return v if _is_abs(v) or url_for is None else url_for(v)
 
@@ -119,7 +119,8 @@ def build_feed(show: Show, episodes: Iterable[FeedEpisode], *,
         summary = (e.summary or one_line(html))[:4000]
         if summary:
             a(f"<itunes:summary>{esc(summary)}</itunes:summary>")
-        link = (e.legacy or {}).get("link") or (episode_link(e) if episode_link else None) or show.link
+        # eigene Folgenseite vor dem importierten Link: nach dem Umzug soll der Feed nicht mehr zum alten Hoster führen
+        link = (episode_link(e) if episode_link else None) or (e.legacy or {}).get("link") or show.link
         if link:
             a(f"<link>{esc(link)}</link>")
         a(f'<guid isPermaLink="false">{esc(e.guid)}</guid>')
