@@ -64,14 +64,14 @@ def build(app, cfg):
 
 
 def test_pages_are_built_with_feed(client, app, cfg):
-    app.state.db.set_setting("show", {"title": "Uebel & Veredelt", "description": "Zwei reden.\n\nÜber Dinge.", "language": "de", "author": "A und B"})
+    app.state.db.set_setting("show", {"title": "Zwei & Mikrofon", "description": "Zwei reden.\n\nÜber Dinge.", "language": "de", "author": "A und B"})
     app.state.db.set_setting("site", {"platforms": [{"name": "Apple Podcasts", "url": "https://podcasts.apple.com/x"},
                                                       {"name": "Kaputt", "url": "javascript:alert(1)"}]})
     _, key1 = add_episode(app, cfg, "Pilot <1>", "g-1", 0)
     add_episode(app, cfg, "Zweite Folge", "g-2", 7)
     pub, index = build(app, cfg)
     c = parse(index)
-    assert '<html lang="de">' in index and "<title>Uebel &amp; Veredelt</title>" in index
+    assert '<html lang="de">' in index and "<title>Zwei &amp; Mikrofon</title>" in index
     assert "Zwei reden." in index and "Über Dinge." in index
     assert 'href="https://podcasts.apple.com/x"' in index and "javascript:" not in index and "RSS-Feed" in index
     assert index.index("Zweite Folge") < index.index("Pilot &lt;1&gt;")  # neueste zuerst

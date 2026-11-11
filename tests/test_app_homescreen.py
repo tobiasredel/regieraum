@@ -5,11 +5,11 @@ from .test_app_hostauth import login, pcfg, pclient  # noqa: F401  (Fixtures)
 
 
 def test_manifest_content(client):
-    client.put("/api/host/settings", json={"show": {"title": "Uebel und Veredelt"}})
+    client.put("/api/host/settings", json={"show": {"title": "Zwei am Mikrofon"}})
     r = client.get("/app.webmanifest")
     assert r.status_code == 200 and r.headers["content-type"].startswith("application/manifest+json")
     m = r.json()
-    assert m["name"] == "Uebel und Veredelt" and m["short_name"] == "Uebel und V…"
+    assert m["name"] == "Zwei am Mikrofon" and m["short_name"] == "Zwei am Mik…"
     assert m["display"] == "standalone" and m["start_url"] == "/studio"
     sizes = {i["sizes"] for i in m["icons"]}
     assert sizes == {"192x192", "512x512"}
