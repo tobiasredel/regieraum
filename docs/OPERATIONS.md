@@ -92,9 +92,9 @@ With `PS_HOST_AUTH=password` (the default) the app protects everything itself ex
 proxy is enough. With `PS_HOST_AUTH=proxy` the app checks nothing and your proxy has to protect every path **except**
 these public ones:
 
-`/join/`, `/api/join`, `/api/p/`, `/ws/p`, `/static/`, `/public/` and `/healthz`
+`/join/`, `/api/join`, `/api/p/`, `/ws/p`, `/static/`, `/public/`, `/d/` and `/healthz`
 
-(`/public/` only matters with `PS_STORAGE=local`.) Guests need these to join through an invitation link without an
+(`/public/` only matters with `PS_STORAGE=local`, `/d/` only with download counting in the app.) Guests need these to join through an invitation link without an
 account. Everything else, including `/studio`, `/settings` and `/api/host/`, belongs to the host. `PS_HOST_AUTH=none`
 is for development and tests only.
 
