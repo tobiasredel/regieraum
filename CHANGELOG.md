@@ -4,6 +4,12 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+### Added
+
+- Numbering (Settings → Numbering): the year as season or no seasons, a prefix such as `#{number} ` before the title
+  in the feed, and "Renumber all episodes" by date with a preview, for imports with duplicate or missing numbers.
+  New episodes get the next number when the recording starts.
+
 ### Changed
 
 - With the show site on, every feed entry links to its own episode page, also for imported episodes that still

@@ -16,6 +16,18 @@ const signature = (ep) => `${ep.status}|${JSON.stringify(ep.files)}|${ep.source}
 const runningJob = (ep) => (ep.jobs || []).find((j) => j.status === "running") || (ep.jobs || []).find((j) => j.status === "queued");
 
 // --- Laden -----------------------------------------------------------------------------------
+function numberLabel(ep) {
+  if (ep.number == null) return t("Folge ohne Nummer");
+  if (!ep.season) return t("Folge {n}", { n: ep.number });
+  return ep.numbering?.season === "year" ? t("{year} · Folge {n}", { year: ep.season, n: ep.number }) : t("Folge {n}, Staffel {season}", { n: ep.number, season: ep.season });
+}
+
+/** Titel, wie er im Feed steht: mit dem Präfix der Nummerierung (Einstellungen → Nummerierung). */
+function feedTitle(title, number, season, prefix) {
+  if (!prefix || !number || (prefix.includes("{season}") && !season)) return title;
+  return prefix.replaceAll("{number}", String(number)).replaceAll("{season}", String(season || "")) + title;
+}
+
 async function start() {
   try {
     state.ep = await api(`/episodes/${encodeURIComponent(id)}`);
@@ -145,7 +157,7 @@ function header(ep) {
   if (ep.source === "imported") meta.append(h("span", { class: "m-sep", "aria-hidden": "true" }, "·"), h("span", null, t("importiert")));
   return h("header", { class: "m-head" },
     h("p", { class: "m-crumb" }, h("a", { href: "/episodes" }, t("Alle Folgen"))),
-    h("p", { class: "tr-eyebrow mit-punkt" }, ep.number != null ? (ep.season ? t("Folge {n}, Staffel {season}", { n: ep.number, season: ep.season }) : t("Folge {n}", { n: ep.number })) : t("Folge ohne Nummer")),
+    h("p", { class: "tr-eyebrow mit-punkt" }, numberLabel(ep)),
     h("h1", { class: "m-h1", id: "m-title" }, ep.title || t("Ohne Titel")),
     meta);
 }
@@ -346,6 +358,14 @@ function detailsSection(ep) {
     chapters: Object.fromEntries((ep.chapters_preview || []).map((c) => [c.event_id, c.title])),
   };
   [m.title, m.number, m.season, m.summary, m.explicit].forEach((el) => el.addEventListener("input", () => { updateDirty(); if (el === m.title) $("#m-title").textContent = el.value.trim() || t("Ohne Titel"); }));
+  const prefix = ep.numbering?.prefix || "";
+  const feedLine = h("p", { class: "tr-small", "aria-live": "polite", hidden: !prefix });
+  const syncFeed = () => {
+    const n = parseInt(m.number.value, 10), s = parseInt(m.season.value, 10);
+    feedLine.textContent = t("Im Feed: „{title}“", { title: feedTitle(m.title.value.trim() || t("Ohne Titel"), Number.isNaN(n) ? null : n, Number.isNaN(s) ? null : s, prefix) });
+  };
+  [m.title, m.number, m.season].forEach((el) => el.addEventListener("input", syncFeed));
+  syncFeed();
   state.ui.titleSuggest = h("div", { class: "m-suggest" });
   state.ui.summarySuggest = h("div", { class: "m-suggest" });
   state.ui.notesSuggest = h("div", { class: "m-suggest" });
@@ -372,6 +392,7 @@ function detailsSection(ep) {
   const sec = section("angaben", t("Angaben"),
     h("div", { class: "app-row m-section-actions" }, state.ui.bSuggest),
     field(t("Titel"), m.title),
+    feedLine,
     state.ui.titleSuggest,
     h("div", { class: "m-grid3" },
       field(t("Folgennummer"), m.number, { id: "m-number" }),

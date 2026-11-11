@@ -93,6 +93,7 @@ def test_full_recording_flow(client, app, clock):
         h.send_json({"type": "rec.start"})
         started = recv_until(g, "rec.start")
         assert started["start_at"] == T0 + 1500 and started["episode_id"] == ep["id"]
+        assert db.one("SELECT number FROM episodes WHERE id=?", (ep["id"],))["number"] == 1  # Nummer gleich beim Start
         clock.advance(1500)  # Aufnahme beginnt (T = T0+1500)
 
         clock.advance(2000)

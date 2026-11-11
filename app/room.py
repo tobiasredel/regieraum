@@ -303,11 +303,15 @@ class Room:
             raise ApiError(409, "uploading", "Der Upload der letzten Aufnahme läuft noch")
         start_at = util.now_ms() + START_LEAD_MS
         core.set_studio_choice(self.db, None, chosen=False)  # nach dieser Aufnahme gilt wieder die neueste Vorbereitung
+        # neue Folge: nächste Nummer und Staffel gleich beim Start, damit Studio und Folgenseite sie zeigen
+        numbering = core.get_numbering(self.db)
+        number = ep["number"] or core.next_number(self.db)
+        season = core.season_for(start_at, numbering["season"], ep["season"])
         with self.db.tx() as c:
             c.execute("INSERT INTO events(id,episode_id,kind,server_ms,payload) VALUES(?,?,?,?,?)",
                       (util.new_id(), ep["id"], "rec.start", start_at, "{}"))
-            c.execute("UPDATE episodes SET status='recording', rec_start_server_ms=?, rec_stop_server_ms=NULL WHERE id=?",
-                      (start_at, ep["id"]))
+            c.execute("UPDATE episodes SET status='recording', rec_start_server_ms=?, rec_stop_server_ms=NULL, number=?, "
+                      "season=? WHERE id=?", (start_at, number, season, ep["id"]))
         await self.companion.on_rec_start(ep["id"], start_at)  # vor der Meldung: Chunks beginnen erst ab rec.start
         await self.broadcast({"type": "rec.start", "episode_id": ep["id"], "start_at": start_at})
         await self.send_room()

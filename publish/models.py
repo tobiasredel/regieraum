@@ -66,6 +66,7 @@ class FeedEpisode:
     explicit: None heißt „wie die Show“. summary: Klartext. description_html: bereits bereinigtes HTML.
     audio_bytes/audio_mime: exakt für `enclosure length` und `type`. chapters_key/transcript_key: optional.
     legacy: Zusatzfelder importierter Folgen (`link`, `image_url`, `image_key`, `guid_is_permalink`, `title_itunes`).
+    itunes_title: Titel ohne Nummer für `<itunes:title>`, wenn `title` ein Präfix der Nummerierung trägt (sonst leer).
     imported: True bei Folgen aus dem Import (GUID-Attribut isPermaLink="false" gilt für alle, siehe SPEC).
     """
 
@@ -85,6 +86,7 @@ class FeedEpisode:
     chapters_key: str | None = None
     transcript_key: str | None = None
     legacy: Mapping[str, Any] = field(default_factory=dict)
+    itunes_title: str = ""
 
     @classmethod
     def from_row(cls, row: Any) -> "FeedEpisode":
@@ -119,6 +121,7 @@ class FeedEpisode:
             chapters_key=chapters_key,
             transcript_key=transcript_key,
             legacy=legacy,
+            itunes_title=d.get("itunes_title") or "",
         )
 
 

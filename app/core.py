@@ -99,7 +99,8 @@ def get_settings(db: DB, cfg: Config) -> dict:
     assist = {"enabled": False, **db.get_setting("assist", {})}
     archive = {**DEFAULT_ARCHIVE, **(db.get_setting("archive", {}) or {}), "available": cfg.archive_dir is not None}
     return {"show": show, "audio": audio, "assist": assist, "profile": get_profile(db), "format": get_format(db),
-            "ui": {"language": i18n.ui_lang(db)}, "archive": archive, "site": get_site(db), "stats": get_stats(db)}
+            "ui": {"language": i18n.ui_lang(db)}, "archive": archive, "site": get_site(db), "stats": get_stats(db),
+            "numbering": get_numbering(db)}
 
 
 # --- Öffentliche Seite und Download-Zählung (SPEC Abschnitte 10 und 15) ---------------------------------
@@ -129,6 +130,79 @@ def get_stats(db: DB) -> dict:
     stored = db.get_setting("stats", {}) or {}
     mode = stored.get("mode") if stored.get("mode") in STATS_MODES else "off"
     return {"mode": mode, "prefix": str(stored.get("prefix") or "")}
+
+
+# --- Nummerierung (SPEC Abschnitt 10, Nummerierung) ------------------------------------------------------
+SEASON_MODES = ("keep", "year", "none")
+PREFIX_FIELDS = ("number", "season")
+_PREFIX_FIELD = re.compile(r"\{([^{}]*)\}")
+
+
+def get_numbering(db: DB) -> dict:
+    """Nummerierung: `season` (`keep` = von Hand, `year` = Jahr der Veröffentlichung, `none` = keine Staffeln) und
+    `prefix` (Vorlage vor dem Titel im Feed, z. B. `#{number} `; leer = aus)."""
+    stored = db.get_setting("numbering", {}) or {}
+    season = stored.get("season") if stored.get("season") in SEASON_MODES else "keep"
+    return {"season": season, "prefix": str(stored.get("prefix") or "")}
+
+
+def prefix_ok(prefix: str) -> bool:
+    """Nur `{number}` und `{season}` als Platzhalter, keine einzelnen Klammern."""
+    if any(f not in PREFIX_FIELDS for f in _PREFIX_FIELD.findall(prefix)):
+        return False
+    return "{" not in _PREFIX_FIELD.sub("", prefix) and "}" not in _PREFIX_FIELD.sub("", prefix)
+
+
+def numbered_title(title: str, number: int | None, season: int | None, prefix: str) -> str:
+    """Titel mit Präfix (`#{number} ` -> `#12 Titel`). Ohne Nummer oder ohne Präfix bleibt der Titel, wie er ist;
+    braucht das Präfix eine Staffel, die fehlt, ebenso."""
+    if not prefix or not number or ("{season}" in prefix and not season):
+        return title
+    return prefix.replace("{number}", str(number)).replace("{season}", str(season or "")) + title
+
+
+def season_for(ms: int | None, mode: str, current: int | None = None) -> int | None:
+    """Staffel nach Modus: Jahr (Ortszeit des Servers) aus `ms`, keine, oder unverändert."""
+    if mode == "year" and ms:
+        import datetime as dt
+        return dt.datetime.fromtimestamp(ms / 1000).year
+    if mode == "none":
+        return None
+    return current
+
+
+def next_number(db: DB) -> int:
+    """Nächste freie Folgennummer: eins mehr als die höchste vergebene (Vorbereitungen haben keine Nummer)."""
+    row = db.one("SELECT MAX(number) AS n FROM episodes WHERE status!='draft'")
+    return int((row or {}).get("n") or 0) + 1
+
+
+def _episode_order_ms(e: dict) -> int:
+    return int(e.get("published_at") or e.get("publish_at") or e.get("rec_start_server_ms") or e.get("created_at") or 0)
+
+
+def renumber_plan(db: DB, numbering: dict | None = None) -> list[dict]:
+    """Alle Folgen außer Vorbereitungen nach Datum (Veröffentlichung, sonst Planung, Aufnahme, Anlage) ab 1
+    durchnummerieren; die Staffel folgt dem Modus. -> nur die Folgen, die sich ändern:
+    [{id, title, date_ms, old: {number, season}, new: {number, season}}]."""
+    numbering = numbering or get_numbering(db)
+    eps = db.all("SELECT id, title, number, season, status, published_at, publish_at, rec_start_server_ms, created_at "
+                 "FROM episodes WHERE status!='draft'")
+    eps.sort(key=lambda e: (_episode_order_ms(e), e["created_at"] or 0, e["id"]))
+    out = []
+    for i, e in enumerate(eps, start=1):
+        when = _episode_order_ms(e)
+        new = {"number": i, "season": season_for(when, numbering["season"], e["season"])}
+        old = {"number": e["number"], "season": e["season"]}
+        if new != old:
+            out.append({"id": e["id"], "title": e["title"] or "", "date_ms": when, "old": old, "new": new})
+    return out
+
+
+def apply_renumber(db: DB, plan: list[dict]) -> None:
+    with db.tx() as c:
+        for p in plan:
+            c.execute("UPDATE episodes SET number=?, season=? WHERE id=?", (p["new"]["number"], p["new"]["season"], p["id"]))
 
 
 def show_link_is_custom(db: DB, cfg: Config) -> bool:
@@ -314,7 +388,8 @@ def discard_recording(db: DB, ep: dict) -> str:
         c.execute("UPDATE segments SET visited_at=NULL, updated_at=? WHERE episode_id=?", (util.now_ms(), eid))
         c.execute("UPDATE episodes SET status='draft', rec_start_server_ms=NULL, rec_stop_server_ms=NULL, duration_ms=NULL, "
                   "publish_at=NULL, published_at=NULL, audio_key=NULL, audio_bytes=NULL, audio_mime=NULL, edl=?, ai=NULL, "
-                  "report=NULL, title=NULL, summary=NULL, description_html=NULL, archived_at=NULL, archive_path=NULL "
+                  "report=NULL, title=NULL, summary=NULL, description_html=NULL, archived_at=NULL, archive_path=NULL, "
+                  "number=NULL, season=NULL "
                   "WHERE id=?", (util.dumps(DEFAULT_EDL), eid))
     set_studio_choice(db, eid)
     return eid

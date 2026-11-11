@@ -34,7 +34,7 @@ class SiteOptions:
     """Einstellungen für die Seite. `platforms`: [{name, url}]; `lang`: Sprache der Texte (de/en); `css`: CSS des Themas;
     `chapters`: guid -> [{start_ms, title}]; `known_hashes`: Schlüssel -> Prüfsumme der zuletzt hochgeladenen Seite
     (wird beim Hochladen fortgeschrieben, unveränderte Seiten werden übersprungen); `episode_links`: Feed-Einträge
-    zeigen auf die Folgenseiten."""
+    zeigen auf die Folgenseiten; `season_is_year`: die Staffel ist das Jahr ("2026 · Folge 12" statt "Staffel 2026, Folge 12")."""
 
     platforms: list[dict[str, str]] = field(default_factory=list)
     lang: str = "de"
@@ -43,6 +43,7 @@ class SiteOptions:
     chapters: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     known_hashes: dict[str, str] = field(default_factory=dict)
     episode_links: bool = True
+    season_is_year: bool = False
 
 
 def episode_page_key(guid: str) -> str:
@@ -201,7 +202,12 @@ def _player(e: FeedEpisode, enclosure_url: Callable[[str], str]) -> str:
     return f'<audio controls preload="none" src="{_e(src)}"></audio>'
 
 
-def _meta_line(e: FeedEpisode, lang: str, tr) -> str:
+def plain_title(e: FeedEpisode) -> str:
+    """Titel ohne Präfix der Nummerierung: Die Seite nennt die Nummer in der Zeile darunter."""
+    return e.itunes_title or e.title
+
+
+def _meta_line(e: FeedEpisode, lang: str, tr, season_is_year: bool = False) -> str:
     parts = []
     when = _dt(e.pub_date_ms)
     if when:
@@ -209,7 +215,9 @@ def _meta_line(e: FeedEpisode, lang: str, tr) -> str:
     dur = fmt_duration(e.duration_ms, tr)
     if dur:
         parts.append(f"<span>{_e(dur)}</span>")
-    if e.season and e.number:
+    if e.season and e.number and season_is_year:
+        parts.insert(0, f"<span>{_e(tr('{year} · Folge {n}', year=e.season, n=e.number))}</span>")
+    elif e.season and e.number:
         parts.insert(0, f"<span>{_e(tr('Staffel {s}, Folge {n}', s=e.season, n=e.number))}</span>")
     elif e.number:
         parts.insert(0, f"<span>{_e(tr('Folge {n}', n=e.number))}</span>")
@@ -248,8 +256,8 @@ def render_index(show: Show, eps: list[FeedEpisode], opts: SiteOptions, *, url_f
             blurb = _blurb(e)
             out.append(
                 '<li class="ep"><article>'
-                f'<h3><a href="{_e(episode_page_key(e.guid))}">{_e(e.title)}</a></h3>'
-                + _meta_line(e, lang, tr)
+                f'<h3><a href="{_e(episode_page_key(e.guid))}">{_e(plain_title(e))}</a></h3>'
+                + _meta_line(e, lang, tr, opts.season_is_year)
                 + (f"<p>{_e(blurb)}</p>" if blurb else "")
                 + _player(e, enclosure_url)
                 + "</article></li>")
@@ -265,11 +273,11 @@ def render_episode(show: Show, e: FeedEpisode, opts: SiteOptions, *, url_for: Ca
     tr, lang = opts.tr, opts.lang
     cover = url_for(show.cover_key) if show.cover_key else None
     page_url = url_for(episode_page_key(e.guid))
-    out = [_head(f"{e.title} | {show.title}", _blurb(e, 200), show.language or lang, opts.css, feed_url, tr, cover, page_url)]
+    out = [_head(f"{plain_title(e)} | {show.title}", _blurb(e, 200), show.language or lang, opts.css, feed_url, tr, cover, page_url)]
     out.append('<body>\n<a class="skip" href="#inhalt">' + _e(tr("Zum Inhalt springen")) + "</a>")
     out.append('<main id="inhalt" class="wrap"><nav class="crumb" aria-label="' + _e(tr("Navigation")) + '">'
                f'<a href="../{INDEX_KEY}">{_e(show.title)}</a> · <a href="../{INDEX_KEY}#folgen">{_e(tr("Alle Folgen"))}</a></nav>')
-    out.append(f"<article><h1>{_e(e.title)}</h1>" + _meta_line(e, lang, tr) + _player(e, enclosure_url))
+    out.append(f"<article><h1>{_e(plain_title(e))}</h1>" + _meta_line(e, lang, tr, opts.season_is_year) + _player(e, enclosure_url))
     notes = clean_html(e.description_html) or clean_html(e.summary)
     if notes:
         out.append(f'<section aria-labelledby="notes"><h2 id="notes">{_e(tr("Shownotes"))}</h2><div class="notes">{notes}</div></section>')

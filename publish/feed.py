@@ -112,6 +112,8 @@ def build_feed(show: Show, episodes: Iterable[FeedEpisode], *,
     for e in eps:
         a("<item>")
         a(f"<title>{esc(e.title)}</title>")
+        if e.itunes_title and e.itunes_title != e.title:
+            a(f"<itunes:title>{esc(e.itunes_title)}</itunes:title>")
         html = clean_html(e.description_html) or clean_html(e.summary)
         if html:
             a(f"<description>{cdata(html)}</description>")

@@ -273,5 +273,8 @@
   "{n} Folgen übernommen, {m} schon vorhanden, {k} fehlgeschlagen (erneut importieren holt sie nach)": "{n} episodes imported, {m} already present, {k} failed (importing again will fetch them)",
   "{what} fehlgeschlagen ({detail})": "{what} failed ({detail})",
   "{what}: ffmpeg hat zu lange gebraucht": "{what}: ffmpeg took too long",
-  "Übersteuerung in der Spur von {name}: {n} Stellen": "Clipping in the track of {name}: {n} places"
+  "Übersteuerung in der Spur von {name}: {n} Stellen": "Clipping in the track of {name}: {n} places",
+  "Die Folgen haben sich seit der Vorschau geändert. Bitte die Vorschau neu laden": "The episodes have changed since the preview. Please reload the preview",
+  "Im Präfix sind als Platzhalter nur {a} und {b} erlaubt": "Only {a} and {b} are allowed as placeholders in the prefix",
+  "Während einer Aufnahme lässt sich nicht neu nummerieren": "Renumbering is not possible while recording"
 }

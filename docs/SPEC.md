@@ -603,6 +603,21 @@ neu, sobald mindestens eine Folge veröffentlicht ist (`publishing.refresh_feed`
 der Speicher, sind die Einstellungen gespeichert und die Antwort ist `502 storage`. Der Import legt das Cover zusätzlich
 unter `$PS_DATA/cover/` ab, weil Einstellungsseite und Verarbeitung es von dort lesen.
 
+Nummerierung (Ergänzung 11.11.2026): Einstellung `numbering = {season, prefix}`. `season`: `keep` (Standard, Staffel von
+Hand), `year` (Staffel = Jahr der Veröffentlichung in Ortszeit des Servers, die Nummer läuft über alle Jahre weiter) oder
+`none` (keine Staffel). `prefix`: Vorlage vor dem Titel im Feed mit den Platzhaltern `{number}` und `{season}` (andere
+Platzhalter oder einzelne Klammern: 422), leer = aus; Beispiel `#{number} ` ergibt „#12 Titel“. Gespeichert bleibt der
+Titel ohne Präfix; `<title>` im Feed trägt es, `<itunes:title>` nennt dann den Titel ohne (Apple zeigt die Nummer selbst),
+die öffentliche Seite zeigt den Titel ohne Präfix und darunter „2026 · Folge 12“ (bei `year`) bzw. „Staffel 2, Folge 12“.
+Neue Folgen bekommen beim Start der Aufnahme (`rec.start`) die nächste Nummer (`MAX(number)+1` über alle Folgen außer
+Vorbereitungen) und die Staffel nach Modus; Verwerfen nimmt beides zurück. Beim Veröffentlichen setzt `year` die Staffel
+auf das Jahr der Veröffentlichung, eine fehlende Nummer wird ergänzt. Bei `year` gilt die Nummer über alle Staffeln als
+vergeben (409 `number_taken`). `GET /episodes/renumber` zeigt, was „Neu nummerieren“ ändern würde (alle Folgen außer
+Vorbereitungen nach Datum: Veröffentlichung, Planung, Aufnahme, Anlage; ab 1; Staffel nach Modus), `POST /episodes/renumber
+{count}` übernimmt es (409 `changed`, wenn die Zahl der Änderungen nicht mehr stimmt, 409 `busy` während einer Aufnahme) und
+baut den Feed neu. GUIDs bleiben, Podcast-Apps laden nichts neu. Oberfläche: Einstellungen → Nummerierung, auf der
+Folgenseite „Im Feed: …“ unter dem Titel. Prüfung: `tests/test_app_numbering.py`.
+
 Öffentliche Seite (Ergänzung 11.11.2026): Bei jedem Neubau des Feeds (`publishing.rebuild_feed`) entstehen im Speicher
 zusätzlich statische Seiten ohne JavaScript, CSS inline: `index.html` (Cover, Titel, Beschreibung, Links zu Podcast-Apps,
 Folgenliste neueste zuerst mit Datum, Dauer, Kurzbeschreibung und `<audio controls preload="none">`) und je Folge

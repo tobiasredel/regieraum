@@ -33,7 +33,15 @@ def storage():
 
 
 def _published_rows(db: DB) -> list[dict]:
-    return db.all("SELECT * FROM episodes WHERE status='published' AND audio_key IS NOT NULL AND audio_bytes IS NOT NULL")
+    """Veröffentlichte Folgen für Feed und Seite. Mit Präfix der Nummerierung wird `title` zum Titel mit Nummer
+    (`<title>` im Feed) und `itunes_title` zum Titel ohne (`<itunes:title>`, Apple zeigt die Nummer selbst an)."""
+    rows = db.all("SELECT * FROM episodes WHERE status='published' AND audio_key IS NOT NULL AND audio_bytes IS NOT NULL")
+    prefix = core.get_numbering(db)["prefix"]
+    for r in rows:
+        full = core.numbered_title(r["title"] or "", r["number"], r["season"], prefix)
+        if full != (r["title"] or ""):
+            r["itunes_title"], r["title"] = r["title"], full
+    return rows
 
 
 def _theme_css() -> str:
@@ -77,7 +85,8 @@ def _feed_parts(db: DB, cfg: Config, st, rows: list[dict]) -> dict:
         site = site_pages.SiteOptions(
             platforms=site_cfg["platforms"], lang=page_lang, tr=lambda text, **p: i18n.tr(page_lang, text, **p),
             css=_theme_css(), chapters=_chapters_by_guid(cfg, rows), known_hashes=known,
-            episode_links=not core.show_link_is_custom(db, cfg))
+            episode_links=not core.show_link_is_custom(db, cfg),
+            season_is_year=settings["numbering"]["season"] == "year")
     enclosure = release.enclosure_url_fn(st, stats["mode"], stats["prefix"], cfg.base_url)
     return {"show": show, "enclosure_url": enclosure, "site": site}
 
@@ -182,6 +191,11 @@ def publish_episode(db: DB, cfg: Config, episode_id: str, progress: Callable[[fl
     _upload_cover(cfg, db, st)
     now = util.now_ms()
     published_at = ep["publish_at"] if ep["publish_at"] and ep["publish_at"] <= now else now
+    numbering = core.get_numbering(db)
+    if numbering["season"] == "year":  # Staffel = Jahr der Veröffentlichung, nicht der Aufnahme
+        fields["season"] = core.season_for(published_at, "year")
+    if not ep["number"]:
+        fields["number"] = core.next_number(db)
     core.update_episode(db, episode_id, status="published", published_at=published_at, **fields)
     progress(0.9, "Feed wird aktualisiert")
     rebuild_feed(db, cfg, st)

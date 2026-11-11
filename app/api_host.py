@@ -290,6 +290,12 @@ class StatsPatch(BaseModel):
     prefix: str | None = Field(default=None, max_length=300)
 
 
+class NumberingPatch(BaseModel):
+    """Nummerierung: Staffel-Modus und Präfix vor dem Titel im Feed (Platzhalter `{number}`, `{season}`)."""
+    season: Literal["keep", "year", "none"] | None = None
+    prefix: str | None = Field(default=None, max_length=40)
+
+
 class SettingsPatch(BaseModel):
     show: ShowPatch | None = None
     site: SitePatch | None = None
@@ -300,6 +306,7 @@ class SettingsPatch(BaseModel):
     format: FormatPatch | None = None
     ui: UiPatch | None = None
     archive: ArchivePatch | None = None
+    numbering: NumberingPatch | None = None
 
 
 async def _refresh_feed(st) -> None:
@@ -347,6 +354,13 @@ async def settings_put(body: SettingsPatch, request: Request) -> dict:
     if body.assist and body.assist.enabled is not None:
         await st.room.companion.set_enabled(body.assist.enabled)
     site_changed = await _site_and_stats_put(body, st, cur)
+    if body.numbering:
+        patch = body.numbering.model_dump(exclude_unset=True, exclude_none=True)
+        new = {**cur["numbering"], **patch}
+        if not core.prefix_ok(new["prefix"]):
+            raise ApiError(422, "invalid", "Im Präfix sind als Platzhalter nur {a} und {b} erlaubt", a="{number}", b="{season}")
+        st.db.set_setting("numbering", new)
+        site_changed = True
     if body.show or site_changed:
         await _refresh_feed(st)
     return core.get_settings(st.db, st.cfg)
@@ -428,6 +442,33 @@ def _files(cfg, ep_id: str) -> dict:
             "chapters": (out / "chapters.json").exists()}
 
 
+@router.get("/episodes/renumber")
+def renumber_preview(request: Request) -> dict:
+    """Was „Neu nummerieren“ ändern würde (nichts wird gespeichert)."""
+    st = _st(request)
+    plan = core.renumber_plan(st.db)
+    total = st.db.one("SELECT COUNT(*) AS n FROM episodes WHERE status!='draft'")["n"]
+    return {"changes": plan, "total": total, "next_number": total + 1}
+
+
+class RenumberBody(BaseModel):
+    count: int = Field(ge=0)  # Anzahl der Änderungen aus der Vorschau: Hat sich inzwischen etwas geändert, gibt es 409
+
+
+@router.post("/episodes/renumber")
+async def renumber_apply(body: RenumberBody, request: Request) -> dict:
+    st = _st(request)
+    if st.db.one("SELECT id FROM episodes WHERE status IN ('recording','uploading')"):
+        raise ApiError(409, "busy", "Während einer Aufnahme lässt sich nicht neu nummerieren")
+    plan = core.renumber_plan(st.db)
+    if len(plan) != body.count:
+        raise ApiError(409, "changed", "Die Folgen haben sich seit der Vorschau geändert. Bitte die Vorschau neu laden")
+    core.apply_renumber(st.db, plan)
+    if plan:
+        await _refresh_feed(st)
+    return {"changed": len(plan), "next_number": core.next_number(st.db)}
+
+
 @router.get("/episodes")
 def episodes_list(request: Request) -> list[dict]:
     st = _st(request)
@@ -471,6 +512,7 @@ def episode_get(episode_id: str, request: Request) -> dict:
                    st.db.all("SELECT * FROM jobs WHERE episode_id=? ORDER BY created_at DESC LIMIT 10", (episode_id,))]
     out["chapters_preview"] = core.chapters_preview(st.db, ep)
     out["notes"] = core.notes_of(st.db, ep)  # Merkpunkte für den Schnitt, Zeit in Sitzungszeit
+    out["numbering"] = core.get_numbering(st.db)  # für die Vorschau des Feed-Titels
     out["costs"] = core.costs_of(st.db, episode_id)
     out["storage"] = {"local_bytes": archive.dir_bytes(st.cfg.episode_dir(episode_id)), "archived": bool(ep["archived_at"]),
                       "archive_available": st.cfg.archive_dir is not None}
@@ -519,8 +561,11 @@ def episode_patch(episode_id: str, body: EpisodePatch, request: Request) -> dict
                 continue
             fields[k] = changes[k]
     if "number" in fields and fields["number"] is not None:
-        dup = st.db.one("SELECT id FROM episodes WHERE number=? AND id!=? AND COALESCE(season,0)=COALESCE(?,0)",
-                        (fields["number"], episode_id, fields.get("season", ep["season"])))
+        if core.get_numbering(st.db)["season"] == "year":  # Jahr als Staffel: die Nummer läuft über alle Jahre
+            dup = st.db.one("SELECT id FROM episodes WHERE number=? AND id!=? AND status!='draft'", (fields["number"], episode_id))
+        else:
+            dup = st.db.one("SELECT id FROM episodes WHERE number=? AND id!=? AND COALESCE(season,0)=COALESCE(?,0)",
+                            (fields["number"], episode_id, fields.get("season", ep["season"])))
         if dup:
             raise ApiError(409, "number_taken", "Die Folgennummer {number} ist schon vergeben", number=fields["number"])
     if body.edl is not None:

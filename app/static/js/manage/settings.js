@@ -37,9 +37,9 @@ function safeSession(op, value) {
 function render() {
   clear(root);
   const toc = h("nav", { class: "m-toc", "aria-label": t("Auf dieser Seite") },
-    ...[["sprache", t("Sprache")], ["show", t("Show")], ["format", t("Sendung und Format")], ["cover", t("Cover")], ["klang", t("Klang")], ["archiv", t("Rohdaten und Archiv")], ["einladungen", t("Einladungen")], ["import", t("Import")], ["feed", t("Feed")], ["seite", t("Öffentliche Seite")], ["downloads", t("Downloads")], ["status", t("Systemstatus")]]
+    ...[["sprache", t("Sprache")], ["show", t("Show")], ["format", t("Sendung und Format")], ["cover", t("Cover")], ["klang", t("Klang")], ["archiv", t("Rohdaten und Archiv")], ["einladungen", t("Einladungen")], ["import", t("Import")], ["feed", t("Feed")], ["nummern", t("Nummerierung")], ["seite", t("Öffentliche Seite")], ["downloads", t("Downloads")], ["status", t("Systemstatus")]]
       .map(([k, label]) => h("a", { href: `#${k}` }, label)));
-  root.append(toc, languageSection(), showSection(), formatSection(), coverSection(), audioSection(), archiveSection(), inviteSection(), importSection(), feedSection(), siteSection(), statsSection(), h("section", { class: "m-section", id: "status" }, h("h2", { class: "m-h2" }, t("Systemstatus")), h("div", { id: "m-status" }, h("p", { class: "tr-small" }, t("Status wird geladen")))));
+  root.append(toc, languageSection(), showSection(), formatSection(), coverSection(), audioSection(), archiveSection(), inviteSection(), importSection(), feedSection(), numberingSection(), siteSection(), statsSection(), h("section", { class: "m-section", id: "status" }, h("h2", { class: "m-h2" }, t("Systemstatus")), h("div", { id: "m-status" }, h("p", { class: "tr-small" }, t("Status wird geladen")))));
 }
 
 // --- Sprache ------------------------------------------------------------------------------------
@@ -579,6 +579,82 @@ function statsSection() {
     prefixField,
     h("p", { class: "tr-small" }, t("Die Adressen der Audiodateien im Feed ändern sich; Podcast-Apps erkennen Folgen an ihrer Kennung und laden nichts neu")),
     h("div", { class: "app-row m-ed-save" }, button(t("Zählung speichern"), { onclick: save }), state));
+}
+
+// --- Nummerierung ------------------------------------------------------------------------------
+function numberingSection() {
+  const cur = settings.numbering || { season: "keep", prefix: "" };
+  const modes = [
+    ["keep", t("Von Hand"), t("Staffel und Nummer stehen so, wie sie auf der Folgenseite eingetragen sind")],
+    ["year", t("Jahr als Staffel"), t("Die Staffel ist das Jahr der Veröffentlichung, die Nummer läuft über alle Jahre weiter")],
+    ["none", t("Keine Staffeln"), t("Nur eine durchgehende Nummer")],
+  ];
+  const radios = h("div", { class: "m-radios", role: "radiogroup", "aria-labelledby": "m-num-label" });
+  modes.forEach(([v, name, desc]) => radios.append(h("div", null,
+    h("label", { class: "m-check", for: `m-num-${v}` }, h("input", { type: "radio", name: "m-num", id: `m-num-${v}`, value: v, checked: cur.season === v, "aria-describedby": `m-num-${v}-d` }), h("span", null, name)),
+    h("p", { class: "tr-small m-radio-desc", id: `m-num-${v}-d` }, desc))));
+  const prefix = input("text", cur.prefix, { maxlength: "40", placeholder: "#{number} ", autocomplete: "off", spellcheck: "false" });
+  const example = h("p", { class: "tr-small m-created", "aria-live": "polite" });
+  const sync = () => {
+    const p = prefix.value;
+    const shown = p ? p.replaceAll("{number}", "12").replaceAll("{season}", String(new Date().getFullYear())) : "";
+    example.textContent = t("Im Feed: „{title}“", { title: shown + t("Titel der Folge") });
+  };
+  prefix.addEventListener("input", sync);
+  sync();
+  const state = h("span", { class: "m-save-state", role: "status" });
+  const save = async () => {
+    state.className = "m-save-state";
+    state.textContent = t("Speichert");
+    try {
+      settings = await api("/settings", { method: "PUT", json: { numbering: { season: radios.querySelector("input:checked")?.value || "keep", prefix: prefix.value } } });
+      state.textContent = t("Gespeichert");
+      state.className = "m-save-state tr-status-ok";
+    } catch (e) {
+      state.textContent = errorText(e);
+      state.className = "m-save-state tr-status-error";
+    }
+  };
+  return section("nummern", t("Nummerierung"),
+    h("p", { class: "m-lead" }, t("Neue Folgen bekommen beim Start der Aufnahme die nächste Nummer. Podcast-Apps zeigen Staffel und Folge aus dem Feed an.")),
+    h("div", { class: "tr-field m-field" }, h("span", { class: "tr-label", id: "m-num-label" }, t("Staffel")), radios),
+    field(t("Präfix vor dem Titel im Feed"), prefix, { id: "m-num-prefix", hint: t("Platzhalter {number} für die Nummer und {season} für die Staffel, leer für keinen. Der gespeicherte Titel bleibt ohne Präfix") }),
+    example,
+    h("div", { class: "app-row m-ed-save" }, button(t("Nummerierung speichern"), { onclick: save }), state),
+    renumberBox());
+}
+
+function renumberBox() {
+  const out = h("div", { class: "m-import-out", "aria-live": "polite" });
+  const load = async () => {
+    clear(out);
+    out.append(h("p", { class: "tr-small" }, t("Vorschau wird geladen")));
+    let res;
+    try { res = await api("/episodes/renumber"); } catch (e) { clear(out); out.append(h("p", { class: "tr-error", role: "alert" }, errorText(e))); return; }
+    clear(out);
+    if (!res.changes.length) { out.append(h("p", { class: "tr-small" }, t("Alle {n} Folgen sind schon in der richtigen Reihenfolge nummeriert. Die nächste bekommt die {next}", { n: res.total, next: res.next_number }))); return; }
+    const label = (v) => (v.number == null ? t("ohne Nummer") : v.season ? `${v.season} · ${v.number}` : String(v.number));
+    const list = h("ul", { class: "m-plain" }, ...res.changes.slice(0, 12).map((c) => h("li", { class: "tr-small" },
+      h("span", { class: "m-num" }, `${label(c.old)} → ${label(c.new)}`), "  ", c.title || t("Ohne Titel"))));
+    const more = res.changes.length > 12 ? h("p", { class: "tr-small" }, t("und {n} weitere", { n: res.changes.length - 12 })) : "";
+    const apply = async () => {
+      const ok = await confirmDialog({ title: t("Folgen neu nummerieren?"), text: t("{n} von {total} Folgen bekommen eine neue Nummer oder Staffel. Der Feed wird danach neu gebaut; Podcast-Apps laden dadurch nichts neu.", { n: res.changes.length, total: res.total }), ok: t("Neu nummerieren") });
+      if (!ok) return;
+      try {
+        const r = await api("/episodes/renumber", { method: "POST", json: { count: res.changes.length } });
+        clear(out);
+        out.append(h("p", { class: "tr-small tr-status-ok", role: "status" }, t("{n} Folgen neu nummeriert. Die nächste bekommt die {next}", { n: r.changed, next: r.next_number })));
+      } catch (e) {
+        out.append(h("p", { class: "tr-error", role: "alert" }, errorText(e)));
+      }
+    };
+    out.append(h("p", null, t("{n} von {total} Folgen ändern sich. Sortiert wird nach dem Datum der Veröffentlichung", { n: res.changes.length, total: res.total })), list, more,
+      h("div", { class: "app-row m-ed-save" }, button(t("Neu nummerieren"), { onclick: apply })));
+  };
+  return h("div", { class: "m-field" },
+    h("h3", { class: "m-h3 m-h3-gap" }, t("Alle Folgen neu nummerieren")),
+    h("p", { class: "tr-small" }, t("Nummeriert alle Folgen nach Datum ab 1 durch und setzt die Staffel nach der Einstellung oben. Hilft nach einem Import mit doppelten oder fehlenden Nummern")),
+    button(t("Vorschau"), { variant: "secondary", onclick: load }), out);
 }
 
 // --- Systemstatus -----------------------------------------------------------------------------------
