@@ -1,0 +1,337 @@
+/* Live-Studio (Host /studio und Gast /join/…). Nur Tokens des Themas aus
+   design/tokens-unprefixed.css und design/app-basis.css (docs/THEME.md). Fehlende Werte: nächstliegender Token und TODO(design).
+   Durchgesehen mit unslop (Damir Sokolovsky, @heydamir, CC BY 4.0). */
+
+.ps-app{min-width:0}
+.ps-app h1{margin-bottom:var(--space-2)}
+.ps-lead{color:var(--slate);max-width:var(--column)}
+.ps-small{font-size:var(--fs-small);line-height:1.5;color:var(--slate)}
+.ps-error{color:var(--danger);font-size:16px;margin-top:var(--space-4)}
+.ps-empty{color:var(--slate)}
+.ps-empty-hint{margin-top:var(--space-2);font-size:var(--fs-small)}
+.ps-visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.ps-audio-sink{display:none}
+
+/* ---- Gastseite: eigener schmaler Rahmen ohne Menü ---- */
+.ps-guest-header{max-width:960px}
+.ps-guest-page{max-width:960px;margin:0 auto;padding:var(--space-6) max(20px,env(safe-area-inset-left)) var(--space-8)}
+
+/* ---- Anmeldung des Hosts ---- */
+.ps-login{display:flex;flex-direction:column;gap:var(--space-4);max-width:360px;margin-top:var(--space-5)}
+.ps-login .tr-field{display:flex;flex-direction:column;gap:var(--space-2)}
+.ps-login .tr-input{width:100%}
+.ps-login .ps-error{margin:0}
+
+/* ---- Gerätecheck ---- */
+.ps-check{max-width:var(--column)}
+.ps-check-head{margin-bottom:var(--space-5)}
+.ps-check-grid{display:grid;gap:var(--space-5);background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);padding:var(--space-5)}
+.ps-field{display:flex;flex-direction:column;gap:var(--space-2);min-width:0;border:0;margin:0;padding:0}
+.ps-field small{font-size:var(--fs-small);color:var(--slate)}
+.ps-field .tr-input{width:100%}
+.ps-select{appearance:auto;padding-right:8px;max-width:100%}
+.ps-choice{display:grid;gap:var(--space-2)}
+.ps-choice legend{padding:0;margin-bottom:var(--space-2)}
+.ps-choice label{display:grid;grid-template-columns:20px minmax(0,1fr);column-gap:var(--space-2);align-items:baseline;cursor:pointer;font-size:16px}
+.ps-choice label small{grid-column:2}
+.ps-choice input,.ps-check-line input,.ps-switch input{width:18px;height:18px;margin:0;accent-color:var(--ink)} /* TODO(design): Auswahlfelder nicht im System, ink als Textrolle */
+.ps-check-line{display:flex;gap:var(--space-2);align-items:center;font-size:16px;cursor:pointer}
+.ps-check-actions{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-3) var(--space-4);margin-top:var(--space-5)}
+.ps-check-actions .ps-small{flex:1 1 220px}
+.ps-cam-preview{width:100%;max-width:320px;aspect-ratio:16/9;object-fit:cover;transform:scaleX(-1);border-radius:var(--radius-md);background:var(--paper);border:1px solid var(--line)}
+.ps-fatal{max-width:var(--column)}
+.ps-fatal h1{margin-bottom:var(--space-3)}
+.ps-fatal .tr-btn{margin-top:var(--space-5)}
+
+/* ---- Pegel: Daten, keine Animation. TODO(design): Pegelanzeige nicht im System; Balken wie Diagramm (ink auf paper) ---- */
+.ps-meter{display:flex;align-items:center;gap:var(--space-3);min-width:0}
+.ps-meter-track{position:relative;flex:1;min-width:0;height:8px;background:var(--paper);border:1px solid var(--line);border-radius:2px;overflow:hidden}
+.ps-meter-fill{position:absolute;inset:0 auto 0 0;width:0;background:var(--ink)}
+.ps-meter.is-large .ps-meter-track{height:12px}
+.ps-meter-db{flex:none;min-width:4.5em;text-align:right;font-size:var(--fs-small);color:var(--slate);font-variant-numeric:tabular-nums}
+.ps-meter-clip{font-size:var(--fs-small)}
+
+/* ---- Studio-Raster: Hauptspalte und (Host) Sendeplan ---- */
+.ps-studio{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--space-6);align-items:start}
+.ps-plan{min-width:0}
+.ps-main{display:flex;flex-direction:column;gap:var(--space-5);min-width:0}
+.ps-studio.is-guest{max-width:var(--column)}
+.ps-studio.is-guest.has-stage{max-width:none}
+@media (min-width:1280px){
+  .ps-studio.is-host{grid-template-columns:minmax(0,1.15fr) minmax(340px,1fr)}
+  .ps-studio.is-host.has-stage{grid-template-columns:minmax(0,1.6fr) minmax(340px,1fr)}
+  .ps-plan{position:sticky;top:calc(64px + var(--space-5));max-height:calc(100vh - 64px - var(--space-6));overflow:auto}
+}
+.ps-col-title{font:500 var(--fs-h3)/1.3 var(--font-sans);margin:0 0 var(--space-3)}
+.ps-col-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:var(--space-2);margin-bottom:var(--space-3)}
+.ps-col-head .ps-col-title{margin:0}
+
+.ps-bar,.ps-self,.ps-sounds,.ps-upload,.ps-plan{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);padding:var(--space-5)}
+.ps-bar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-4)}
+.ps-bar-text{min-width:0;flex:1 1 240px}
+.ps-status{font:500 var(--fs-h2)/1.2 var(--font-serif);font-variant-numeric:tabular-nums;margin:0}
+.ps-status-sub{font-size:var(--fs-small);color:var(--slate);margin-top:var(--space-1)}
+.ps-status-sub:empty{display:none}
+.ps-controls{display:flex;flex-wrap:wrap;gap:var(--space-3)}
+.ps-conn{font-size:16px}
+
+/* Hinweise: Status als Text auf weißer Karte, keine farbigen Flächen */
+.ps-banners{display:flex;flex-direction:column;gap:var(--space-3)}
+.ps-banners:empty{display:none}
+.ps-banner{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);padding:var(--space-3) var(--space-4)}
+.ps-banner p{flex:1 1 220px;margin:0}
+.ps-banner.is-warn p{color:var(--warning)}
+.ps-banner.is-error p{color:var(--danger)}
+
+.ps-upload-title{font:500 var(--fs-h3)/1.3 var(--font-sans);margin:0 0 var(--space-3)}
+.ps-upload-actions{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-3) var(--space-5);margin-top:var(--space-3)}
+.ps-progress{height:8px;background:var(--paper);border:1px solid var(--line);border-radius:2px;overflow:hidden;margin-bottom:var(--space-2)}
+.ps-progress span{display:block;height:100%;background:var(--ink)}
+
+/* ---- Teilnehmer ---- */
+.ps-peers{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);overflow:hidden}
+.ps-peer{display:flex;gap:var(--space-4);align-items:flex-start;padding:var(--space-4)}
+.ps-peer+.ps-peer{border-top:1px solid var(--line)}
+.ps-peer.is-away .ps-peer-name{color:var(--slate)}
+.ps-peer-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:var(--space-2)}
+.ps-peer-name{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--space-2);font-weight:500;font-size:16px;margin:0}
+.ps-peer-role{font-weight:400;font-size:var(--fs-small);color:var(--slate)}
+.ps-peer-facts{font-size:var(--fs-small);color:var(--slate);margin:0}
+
+/* ---- Bühne: Kamerabilder groß, sobald eine Kamera läuft. Schmal: Gegenüber groß, eigenes Bild klein in der Ecke.
+   Breit und zu zweit: beide Bilder gleich groß nebeneinander. TODO(design): Videokachel nicht im System;
+   Fläche wie Karte (paper, Linie, großer Radius), Namensschild wie tr-tag auf surface ---- */
+.ps-stage-wrap{container-type:inline-size}
+.ps-stage{position:relative;display:grid;grid-template-columns:minmax(0,1fr);gap:var(--space-2);max-width:var(--column)}
+.ps-stage[data-others="2"],.ps-stage[data-others="3"]{grid-template-columns:repeat(2,minmax(0,1fr));max-width:none}
+.ps-tile{position:relative;min-width:0;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;overflow:hidden;background:var(--paper);border:1px solid var(--line);border-radius:var(--radius-lg)}
+.ps-tile video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.ps-tile.is-self video{transform:scaleX(-1)}
+.ps-tile-big{padding:0 var(--space-4);font:500 var(--fs-h2)/1.2 var(--font-serif);color:var(--slate);text-align:center;overflow-wrap:anywhere}
+.ps-tile-tag{position:absolute;left:var(--space-2);bottom:var(--space-2);max-width:calc(100% - 2*var(--space-2));display:flex;align-items:baseline;gap:var(--space-2);margin:0;padding:2px var(--space-2);background:var(--surface);border-radius:var(--radius-sm);font:500 14px/1.5 var(--font-sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ps-tile-tag[hidden],.ps-tile-tag [hidden]{display:none}
+.ps-stage:not([data-others="0"]) .ps-tile.is-self{position:absolute;right:var(--space-2);bottom:var(--space-2);z-index:1;width:clamp(96px,26%,200px);border:2px solid var(--surface);border-radius:var(--radius-sm)}
+.ps-stage:not([data-others="0"]) .ps-tile.is-self .ps-tile-tag{display:none}
+@container (min-width:720px){
+  .ps-stage[data-others="1"][data-self="1"]{grid-template-columns:repeat(2,minmax(0,1fr));max-width:none}
+  .ps-stage[data-others="1"] .ps-tile.is-self{position:relative;right:auto;bottom:auto;z-index:auto;width:auto;border:1px solid var(--line);border-radius:var(--radius-lg)}
+  .ps-stage[data-others="1"] .ps-tile.is-self .ps-tile-tag{display:flex}
+}
+
+/* ---- Eigenes Gerät ---- */
+.ps-self{display:flex;flex-direction:column;gap:var(--space-3)}
+.ps-self .ps-col-title{margin:0}
+.ps-self-actions{display:flex;flex-wrap:wrap;gap:var(--space-3)}
+.ps-self-fields{display:grid;gap:var(--space-4);grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.ps-mute-note{font-size:16px;margin:0}
+
+/* ---- Soundboard ---- */
+.ps-board{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:var(--space-2)}
+/* TODO(design): Soundboard-Taste nicht im System; nächstliegend Listenzeile mit Linie, Control-Radius */
+.ps-sound{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto auto;column-gap:var(--space-3);align-items:center;text-align:left;min-height:56px;padding:var(--space-2) var(--space-3);background:var(--surface);border:1px solid var(--muted);border-radius:var(--radius-md);cursor:pointer;transition:border-color var(--dur-fast) var(--ease),background-color var(--dur-fast) var(--ease),transform var(--dur-fast) var(--ease)}
+.ps-sound:hover{border-color:var(--slate);background:var(--paper)}
+.ps-sound:active{transform:scale(.98)}
+.ps-sound[disabled]{cursor:not-allowed;color:var(--slate);border-color:var(--line);background:var(--paper)}
+.ps-key{grid-row:span 2;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:var(--radius-sm);background:var(--paper);border:1px solid var(--line);color:var(--slate);font:500 12px/1 var(--font-sans);font-variant-numeric:tabular-nums}
+.ps-key.is-empty{visibility:hidden}
+.ps-sound-label{font-weight:500;font-size:16px;line-height:1.3;overflow-wrap:anywhere}
+.ps-sound-dur{font-size:var(--fs-small);color:var(--slate);font-variant-numeric:tabular-nums}
+.ps-running{list-style:none;margin:var(--space-3) 0 0;padding:0}
+.ps-running:empty{display:none}
+.ps-run{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2) var(--space-3);padding:var(--space-2) 0;border-top:1px solid var(--line)}
+.ps-run-label{font-weight:500;flex:1 1 140px;min-width:0}
+.ps-run-left{font-size:var(--fs-small);color:var(--slate);font-variant-numeric:tabular-nums;min-width:6.5em}
+.ps-run-stop{height:36px}
+.ps-marker{display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-5);padding-top:var(--space-4);border-top:1px solid var(--line)}
+.ps-inline{display:flex;flex-wrap:wrap;gap:var(--space-3)}
+.ps-inline .tr-input{flex:1 1 200px;min-width:0}
+
+/* ---- Dialog ---- */
+.ps-dialog h2{margin-bottom:var(--space-3)}
+.ps-dialog-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--space-3);margin-top:var(--space-5)}
+
+/* ---- Sendeplan und Begleiter (nur Host): ruhig, große Schrift, keine Bewegung außer neuer Karte ---- */
+.ps-plan{display:flex;flex-direction:column;gap:var(--space-4);font-size:18px;line-height:1.5}
+.ps-plan .ps-col-title{margin:0}
+.ps-segments{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.ps-segment{display:flex;align-items:center;gap:var(--space-2);width:100%;min-height:40px;padding:var(--space-2) var(--space-3);background:none;border:0;border-radius:var(--radius-md);text-align:left;cursor:pointer;color:var(--ink);transition:background-color var(--dur-fast) var(--ease)}
+.ps-segment:hover{background:var(--paper)}
+.ps-segment.is-current{background:var(--paper);box-shadow:inset 0 0 0 1px var(--line)}
+.ps-segment:focus-visible{box-shadow:var(--focus-inset)}
+.ps-segment .tr-dot{width:8px;height:8px}
+.ps-dot-space{flex:none;width:8px}
+.ps-segment-text{flex:1;min-width:0;display:flex;flex-direction:column}
+.ps-segment-kind{font-size:var(--fs-small);color:var(--slate);line-height:1.4}
+.ps-segment-title{font-size:16px;line-height:1.4}
+.ps-segment.is-visited:not(.is-current) .ps-segment-title{color:var(--slate)}
+.ps-segment-status{flex:none;font-size:var(--fs-small);color:var(--slate)}
+.ps-dossier{display:flex;flex-direction:column;gap:var(--space-2);border-top:1px solid var(--line);padding-top:var(--space-4)}
+.ps-dossier:empty{display:none}
+.ps-dossier-title{font:500 var(--fs-h3)/1.3 var(--font-serif)}
+.ps-lage{font-size:18px}
+.ps-fold{border-top:1px solid var(--line);padding-top:var(--space-2)}
+.ps-fold summary{display:flex;align-items:center;gap:var(--space-2);cursor:pointer;font:500 16px/1.4 var(--font-sans);min-height:32px;}
+.ps-fold summary{list-style:none}
+.ps-fold summary::-webkit-details-marker{display:none}
+.ps-fold summary span:first-of-type{flex:1}
+.ps-chev{transition:transform var(--dur-fast) var(--ease)}
+.ps-fold[open]>summary .ps-chev{transform:rotate(90deg)}
+.ps-count{font-size:var(--fs-small);color:var(--slate);font-weight:400;font-variant-numeric:tabular-nums}
+.ps-fold-list{margin:var(--space-2) 0 var(--space-2);padding-left:1.1em;display:flex;flex-direction:column;gap:var(--space-2)}
+.ps-who{font-weight:500}
+.ps-source{font-size:var(--fs-small);display:inline-flex;align-items:center;gap:var(--space-1)}
+.ps-notes{white-space:pre-wrap;margin-top:var(--space-2)}
+.ps-terms{display:flex;flex-wrap:wrap;gap:var(--space-2);margin:var(--space-2) 0}
+.ps-term{height:28px;padding:0 var(--space-2);border-radius:var(--radius-sm);background:var(--paper);border:1px solid var(--line);color:var(--ink);font:400 14px/1 var(--font-sans);cursor:pointer;transition:border-color var(--dur-fast) var(--ease)}
+.ps-term:hover{border-color:var(--slate)}
+.ps-term[disabled]{cursor:default;color:var(--slate)}
+
+.ps-assist{display:flex;flex-direction:column;gap:var(--space-3);border-top:1px solid var(--line);padding-top:var(--space-4)}
+.ps-assist-controls{display:flex;flex-direction:column;gap:var(--space-3)}
+.ps-assist-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-3)}
+.ps-switch{display:inline-flex;align-items:center;gap:var(--space-2);font-size:16px;font-weight:500;cursor:pointer}
+.ps-lookup{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.ps-lookup .tr-input{flex:1 1 160px;min-width:0}
+.ps-assist-status{font-size:var(--fs-small);color:var(--slate);margin:0}
+.ps-assist-line{font-size:var(--fs-small);color:var(--slate);margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ps-cards{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.ps-cards:empty{display:none}
+.ps-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);padding:var(--space-4)}
+.ps-cards.is-pinned .ps-card{border-color:var(--slate)}
+.ps-card.is-new{animation:ps-in var(--dur-slow) var(--ease) both}
+@keyframes ps-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.ps-card-head{display:flex;align-items:center;gap:var(--space-2);margin-bottom:var(--space-1)}
+.ps-card-kind{font:500 14px/1.4 var(--font-sans);color:var(--slate)}
+.ps-card-basis{font-size:var(--fs-small);color:var(--slate)}
+.ps-card-actions{margin-left:auto;display:flex;gap:var(--space-1)}
+.ps-card-text{font-size:20px;line-height:1.4;margin:0}
+.ps-card-detail{font-size:16px;color:var(--slate);margin-top:var(--space-2)}
+.ps-icon-btn{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0;background:none;border:0;border-radius:var(--radius-md);cursor:pointer;transition:background-color var(--dur-fast) var(--ease)}
+.ps-icon-btn:hover{background:var(--paper)}
+.ps-icon-btn:hover .tr-icon,.ps-icon-btn[aria-pressed="true"] .tr-icon{color:var(--ink)}
+
+@media (max-width:639px){
+  .ps-bar,.ps-self,.ps-sounds,.ps-upload,.ps-plan,.ps-check-grid{padding:var(--space-4)}
+  .ps-board{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
+  .ps-controls .tr-btn,.ps-check-actions .tr-btn{flex:1 1 auto;justify-content:center}
+}
+@media (prefers-reduced-motion:reduce){.ps-card.is-new{animation:none}}
+
+/* ==== Sendemodus (nur Host, solange die Aufnahme läuft, ab 1100 px Breite): ein Bildschirm ohne Scrollen ====
+   Kopfzeile mit Ablauf, links Gespräch und Soundboard, in der Mitte die Karten, rechts das Dossier.
+   Navigation und Kopf der Seite sind ausgeblendet; Teilnehmerliste und Gerätewahl liegen im Dialog „Technik“. */
+body.ps-live{overflow:hidden}
+body.ps-live .tr-header,body.ps-live .tr-sidebar{display:none}
+body.ps-live .tr-shell{grid-template-columns:minmax(0,1fr);min-height:0}
+body.ps-live .tr-content{max-width:none;padding:0}
+/* Meldungen unten links, damit sie den Ablauf in der Kopfzeile nicht verdecken */
+body.ps-live .tr-toast{top:auto;bottom:calc(var(--space-5) + env(safe-area-inset-bottom));left:var(--space-5);transform:none}
+.ps-studio.is-host.is-live,.ps-studio.is-host.is-live.has-stage{grid-template-columns:minmax(0,1fr) minmax(300px,.8fr) minmax(0,1.1fr);grid-template-rows:auto minmax(0,1fr);gap:var(--space-4);align-items:stretch;height:100vh;height:100dvh;max-width:1920px;margin:0 auto;padding:var(--space-4) var(--space-5)}
+.ps-live-only{display:none}
+/* Tastenkappe: alles, was sich per Taste auslösen lässt, zeigt seine Taste (wie die Jingles im Soundboard) */
+.tr-btn .ps-kbd{background:none;border-color:currentColor;color:inherit}
+.ps-keys{display:inline-flex;align-items:center;gap:var(--space-1)}
+.ps-hint-keys{align-items:center;gap:var(--space-2);margin-top:var(--space-2)}
+.ps-lookup-field{position:relative;flex:1 1 160px;min-width:0;display:flex}
+.ps-lookup-field .tr-input{flex:1;min-width:0;width:100%}
+.ps-lookup-field .ps-kbd{position:absolute;right:var(--space-3);top:50%;transform:translateY(-50%);pointer-events:none}
+.ps-lookup-field:focus-within .ps-kbd,.ps-lookup-field .tr-input:not(:placeholder-shown)+.ps-kbd{display:none}
+
+/* Kopfzeile: Laufzeit, Abschnitte, Pause und Beenden */
+.is-live>.ps-bar{grid-column:1/-1;flex-wrap:nowrap;gap:var(--space-4);padding:var(--space-3) var(--space-4)}
+.is-live .ps-bar-text{flex:none}
+.is-live .ps-status{font-size:24px;white-space:nowrap}
+.is-live .ps-controls{flex:none;flex-wrap:nowrap}
+.ps-steps-host{flex:1;min-width:0}
+.ps-steps-host:empty{display:none}
+.ps-steps-host .ps-segments{flex-direction:row;gap:var(--space-1)}
+.ps-steps-host .ps-segments li{flex:1;min-width:0}
+.ps-steps-host .ps-segment{align-items:flex-start;min-height:56px;padding:var(--space-1) var(--space-2)}
+.ps-steps-host .tr-dot,.ps-steps-host .ps-dot-space,.ps-steps-host .ps-segment-status{display:none}
+.ps-steps-host .ps-segment-kind{font-size:12px}
+.ps-steps-host .ps-segment.is-current .ps-segment-kind{color:var(--ink);font-weight:500}
+.ps-steps-host .ps-segment-title{font-size:14px;line-height:1.3;overflow-wrap:break-word;hyphens:auto;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.ps-steps-host .ps-empty{font-size:var(--fs-small)}
+.ps-steps-host .ps-empty-hint{display:none}
+.ps-segment-since{font-variant-numeric:tabular-nums}
+
+/* links: Gespräch, Pegelzeile, Soundboard */
+.is-live .ps-main{grid-column:1;min-height:0;gap:var(--space-3)}
+.ps-livebox{display:flex;flex-direction:column;gap:var(--space-2);background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);padding:var(--space-4)}
+.ps-live-meters{display:flex;flex-direction:column;gap:var(--space-1)}
+.ps-meter-name{flex:none;width:5.5em;font-size:var(--fs-small);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ps-live-foot{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3)}
+.ps-live-state{flex:1;min-width:0;margin:0;font-size:var(--fs-small);color:var(--slate)}
+.ps-live-actions{flex:none;display:flex;align-items:center;gap:var(--space-1)}
+.ps-btn-compact{height:36px;padding:0 var(--space-3);font-size:14px}
+.is-live .ps-sounds{flex:1;min-height:0;overflow:auto;padding:var(--space-4)}
+.is-live .ps-sounds .ps-col-title{font:500 14px/1.4 var(--font-sans);color:var(--slate)}
+.is-live .ps-col-head{margin-bottom:var(--space-2)}
+.is-live .ps-board{grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-2)}
+.is-live .ps-sound{min-height:44px;padding:var(--space-1) var(--space-2);column-gap:var(--space-2)}
+.is-live .ps-sound-label{font-size:14px}
+.is-live .ps-key{width:24px;height:24px}
+.is-live .ps-marker{display:none}
+.is-live .ps-live-only{display:flex}
+.ps-bar:has(.ps-steps-host .ps-empty) .ps-step-keys{display:none}
+.ps-step-keys{margin-top:var(--space-1)}
+.ps-sound.is-next{border-color:var(--ink)}
+.ps-sound.is-next .ps-sound-dur{color:var(--ink);font-weight:500}
+
+/* Mitte: Karten mit festem Platz. Neueste groß, ältere klein, Angepinntes unten */
+.ps-live-cards{grid-column:2;display:flex;flex-direction:column;min-height:0;container-type:inline-size}
+.ps-assist.is-live .ps-lookup{flex-wrap:nowrap}
+.ps-assist.is-live .ps-lookup .tr-btn{flex:none}
+@container (max-width:419px){.ps-assist.is-live .ps-lookup .tr-btn{width:44px;padding:0;justify-content:center}.ps-assist.is-live .ps-lookup .tr-btn span{display:none}}
+.ps-assist.is-live{flex:1;min-height:0;gap:var(--space-3);border-top:0;padding-top:0}
+.ps-assist.is-live .ps-assist-controls{display:contents}
+.ps-assist.is-live .ps-assist-status{order:1}
+.ps-assist.is-live .ps-cards-empty{order:2}
+.ps-assist.is-live .ps-cards:not(.is-pinned),.ps-assist.is-live .ps-cards:not(.is-pinned):empty{order:3;display:flex;flex:1;min-height:0;overflow:hidden}
+.ps-assist.is-live .ps-cards.is-pinned{order:4}
+.ps-assist.is-live .ps-assist-line{order:5}
+.ps-assist.is-live .ps-lookup{order:6}
+.ps-assist.is-live .ps-assist-head{order:7}
+.ps-assist.is-live #ps-pulse{background:var(--petrol);color:var(--on-petrol);border-color:transparent}
+.ps-assist.is-live #ps-pulse:hover{background:var(--petrol-dark)}
+.ps-assist.is-live #ps-pulse .tr-icon{color:currentColor}
+.ps-cards-empty{margin:0;font-size:16px;color:var(--slate)}
+.ps-card-age{font-size:var(--fs-small);color:var(--slate)}
+.ps-card.is-big{border-color:var(--slate)}
+.ps-card.is-big .ps-card-text{font-size:24px;line-height:1.35}
+.ps-card.is-old{padding:var(--space-2) var(--space-4)}
+.ps-card.is-old .ps-card-text{font-size:16px;color:var(--slate)}
+.ps-card.is-old .ps-card-detail,.ps-card.is-old .ps-source{display:none}
+.ps-card.is-old .ps-icon-btn{width:28px;height:28px}
+
+/* rechts: Dossier des aktuellen Abschnitts ohne Klappen; was schon gefallen ist, tritt zurück */
+.ps-studio.is-live .ps-plan{grid-column:3;position:static;max-height:none;min-height:0;overflow:auto;gap:var(--space-3);padding:var(--space-4);font-size:16px}
+.ps-plan.is-live>.ps-col-title{display:none}
+.ps-plan.is-live .ps-dossier{gap:var(--space-4);border-top:0;padding-top:0}
+.ps-own{background:var(--paper);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3)}
+.ps-own .ps-notes{margin:0}
+.ps-own-label,.ps-group-head{font:500 14px/1.4 var(--font-sans);color:var(--slate)}
+.ps-group-head{display:flex;justify-content:space-between;gap:var(--space-3);margin:0 0 var(--space-1)}
+.ps-points{list-style:none;margin:0;padding:0}
+.ps-point{display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-3);padding:var(--space-2) 0;border-top:1px solid var(--line)}
+.ps-point-text{flex:1;min-width:0;padding:0;background:none;border:0;border-radius:var(--radius-sm);font:inherit;line-height:1.4;color:inherit;text-align:left}
+button.ps-point-text{cursor:pointer}
+button.ps-point-text:focus-visible{outline:none;box-shadow:var(--focus)}
+.ps-point.is-said .ps-point-text{color:var(--slate);text-decoration:line-through;text-decoration-color:var(--muted)}
+.ps-point-state{flex:none;font-size:var(--fs-small);color:var(--success)}
+.ps-point .ps-source{flex:none;color:var(--slate)}
+.ps-point .ps-source:hover{color:var(--ink)}
+.ps-werk{margin:0 0 var(--space-2)}
+.ps-more>.ps-group-head{margin-top:var(--space-3)}
+
+/* Technik: Teilnehmerliste und eigenes Gerät, während der Aufnahme auf Abruf */
+.ps-tech{width:min(100% - 32px,720px);max-height:calc(100vh - 64px);overflow:auto}
+.ps-tech-head{display:flex;align-items:center;justify-content:space-between;gap:var(--space-4);margin-bottom:var(--space-4)}
+.ps-tech-body{display:flex;flex-direction:column;gap:var(--space-5)}
+
+@media (min-width:1600px){
+  .ps-studio.is-live .ps-plan{font-size:18px}
+  .ps-card.is-big .ps-card-text{font-size:28px}
+  .ps-card.is-old .ps-card-text{font-size:18px}
+  .ps-steps-host .ps-segment-title{font-size:16px}
+}

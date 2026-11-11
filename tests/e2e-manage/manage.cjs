@@ -1,0 +1,183 @@
+// Funktionstests: Schnitt, Titelvorschlag, Sounds, Einladungen, Einstellungen, Plan.
+const L = require("./lib.cjs");
+const { mockPlan } = require("./plan-mock.cjs");
+const fs = require("fs");
+const wav = () => { // 1 s Sinus als WAV
+  const n = 24000, b = Buffer.alloc(44 + n * 2);
+  b.write("RIFF", 0); b.writeUInt32LE(36 + n * 2, 4); b.write("WAVEfmt ", 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22);
+  b.writeUInt32LE(24000, 24); b.writeUInt32LE(48000, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write("data", 36); b.writeUInt32LE(n * 2, 40);
+  for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(8000 * Math.sin(i / 20)), 44 + i * 2);
+  return b;
+};
+
+(async () => {
+  const b = await L.launch();
+  let page = await L.newPage(b);
+  const edl0 = (await L.api((await (async () => { await page.goto(L.BASE + "/episodes"); return page; })()), `/episodes/${L.REVIEW}`)).body.edl;
+
+  console.log("Schnitt");
+  await page.goto(`${L.BASE}/episodes/${L.REVIEW}`);
+  await page.waitForSelector(".m-ed-main");
+  await (await page.$(".m-ed-main")).scrollIntoViewIfNeeded();
+  let box = await (await page.$(".m-ed-main")).boundingBox();
+  const refresh = async () => { await (await page.$(".m-ed-main")).scrollIntoViewIfNeeded(); box = await (await page.$(".m-ed-main")).boundingBox(); };
+  const before = edl0.cuts.length;
+  // Bereich ziehen (zwischen 1:00 und 1:15 Sitzungszeit, Ansicht ganz gezoomt: 166,5 s über Breite)
+  const x = (s) => box.x + (s / 166.5) * box.width;
+  await page.mouse.move(x(105), box.y + 80);
+  await page.mouse.down();
+  await page.mouse.move(x(110), box.y + 80, { steps: 5 });
+  await page.mouse.move(x(115), box.y + 80, { steps: 5 });
+  await page.mouse.up();
+  L.ok(await page.isEnabled("button:has-text('Herausschneiden')"), "Auswahl durch Ziehen aktiviert Herausschneiden");
+  await page.keyboard.press("Delete");
+  L.ok((await page.locator(".m-ed-cutlist li").count()) === before + 1, "Entf schneidet heraus");
+  await page.keyboard.press("Control+z");
+  L.ok((await page.locator(".m-ed-cutlist li").count()) === before, "Strg+Z macht rückgängig");
+  await refresh();
+  await page.mouse.move(x(105), box.y + 80); await page.mouse.down(); await page.mouse.move(x(115), box.y + 80, { steps: 8 }); await page.mouse.up();
+  await page.click("button:has-text('Herausschneiden')");
+  // Trimmgriff am Anfang ziehen
+  await refresh();
+  await page.mouse.move(box.x + 6, box.y + 90); await page.mouse.down(); await page.mouse.move(box.x + 40, box.y + 90, { steps: 6 }); await page.mouse.up();
+  L.ok((await page.textContent(".m-trims")).includes("Anfang"), "Trimmen am Anfang über den Griff");
+  await page.click("button:has-text('Schnitt speichern')");
+  await page.waitForSelector("#m-toast:not([hidden])");
+  await page.reload();
+  await page.waitForSelector(".m-ed-cutlist");
+  const saved = (await L.api(page, `/episodes/${L.REVIEW}`)).body.edl;
+  L.ok(saved.cuts.length === before + 1 && saved.trim_start_ms > 0, `nach Neuladen sind Schnitt und Trim gespeichert (${saved.cuts.length} Schnitte, Trim ${saved.trim_start_ms} ms)`);
+  L.ok((await page.locator(".m-ed-cutlist li").count()) === before + 1, "Schnittliste zeigt den Schnitt nach dem Neuladen");
+  // Klick setzt die Abspielposition
+  await refresh();
+  await page.mouse.click(x(40), box.y + 80);
+  L.ok(/0:40|0:39|0:41/.test(await page.textContent(".m-ed-time")), "Klick setzt die Abspielposition");
+  // Tastatur: Pfeil rechts
+  await page.keyboard.press("ArrowRight");
+  L.ok(/0:45|0:44|0:46/.test(await page.textContent(".m-ed-time")), "Pfeil rechts springt 5 Sekunden");
+  // Zoom
+  await page.click("button[aria-label='Vergrößern']");
+  await page.click("button:has-text('Alles')");
+  // Zustand zurücksetzen
+  await L.api(page, `/episodes/${L.REVIEW}`, { method: "PATCH", json: { edl: edl0 } });
+
+  console.log("Angaben");
+  await page.goto(`${L.BASE}/episodes/${L.REVIEW}`);
+  await page.waitForSelector(".m-chip");
+  await page.click(".m-chip >> nth=1");
+  const titleVal = await page.locator("section#angaben input[type=text]").first().inputValue();
+  L.ok(titleVal === "Der Zug war nie vorgesehen", `Titelvorschlag übernommen: ${titleVal}`);
+  await page.click("section#angaben button:has-text('Vorschlag übernehmen') >> nth=1");
+  await page.locator(".m-chap-list input").nth(1).fill("Blitzlicht: eigener Name");
+  await page.click("button:has-text('Angaben speichern')");
+  await page.waitForFunction(() => document.querySelector(".m-save-state.tr-status-warn") === null);
+  const ep = (await L.api(page, `/episodes/${L.REVIEW}`)).body;
+  L.ok(ep.title === "Der Zug war nie vorgesehen", "Titel gespeichert");
+  L.ok(/<ul>/.test(ep.description_html || ""), "Shownotes aus Vorschlag gespeichert");
+  L.ok(ep.chapters_preview.some((c) => c.title === "Blitzlicht: eigener Name"), "Kapitel umbenannt");
+  // Planen und zurückziehen
+  await page.click("label[for=m-when-later]");
+  const d = new Date(Date.now() + 3 * 86400000); const p2 = (n) => String(n).padStart(2, "0");
+  await page.fill("#m-when-dt", `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T09:00`);
+  await page.click("button:has-text('Veröffentlichung planen')");
+  await page.waitForSelector("text=Geplant für");
+  L.ok((await L.api(page, `/episodes/${L.REVIEW}`)).body.status === "scheduled", "Veröffentlichung geplant");
+  await page.click("button:has-text('Zurückziehen')");
+  await page.click("dialog button:has-text('Planung aufheben')");
+  await page.waitForSelector("button:has-text('Veröffentlichen')");
+  L.ok((await L.api(page, `/episodes/${L.REVIEW}`)).body.status === "review", "Planung aufgehoben, Folge wieder in der Prüfung");
+  await L.api(page, `/episodes/${L.REVIEW}`, { method: "PATCH", json: { title: "", description_html: "", chapter_titles: { [ep.chapters_preview[1].event_id]: "" } } });
+  L.ok(page.problems.filter((p) => !p.includes("409") ).length === 0, `keine Konsolenfehler ${page.problems}`);
+
+  console.log("Sounds");
+  for (const old of (await L.api(page, "/sounds")).body.filter((x) => /e2e-test-sound|Testklang/.test(x.label))) await L.api(page, `/sounds/${old.id}`, { method: "DELETE" });
+  await page.goto(L.BASE + "/sounds");
+  await page.waitForSelector(".m-sound");
+  fs.writeFileSync("/tmp/e2e-test-sound.wav", wav());
+  await page.setInputFiles("#m-file", "/tmp/e2e-test-sound.wav");
+  await page.waitForSelector("text=hinzugefügt");
+  await page.waitForSelector("li.m-sound:has-text('e2e-test-sound')");
+  const rowId = await page.locator("li.m-sound", { hasText: "e2e-test-sound" }).locator("input[id$=-label]").getAttribute("id");
+  const row = page.locator("li.m-sound").filter({ has: page.locator("#" + rowId) });
+  await row.locator("input[id$=-label]").fill("Testklang");
+  await row.locator("input[id$=-label]").blur();
+  await page.waitForSelector("li.m-sound:has-text('Gespeichert')");
+  await row.locator("select[id$=-kind]").selectOption("segment");
+  await page.waitForTimeout(500);
+  let sounds = (await L.api(page, "/sounds")).body;
+  const mine = sounds.find((s) => s.label === "Testklang");
+  L.ok(mine && mine.kind === "segment", "Sound hochgeladen, umbenannt, Art geändert");
+  await row.locator("select[id$=-seg]").selectOption("good");
+  await page.waitForTimeout(400);
+  await row.locator("button[aria-label$='löschen']").click();
+  await page.click("dialog button:has-text('Löschen')");
+  await page.waitForFunction(() => !document.body.textContent.includes("Testklang"));
+  sounds = (await L.api(page, "/sounds")).body;
+  L.ok(!sounds.some((s) => s.label === "Testklang"), "Sound gelöscht");
+
+  console.log("Einstellungen");
+  await page.goto(L.BASE + "/settings");
+  await page.waitForSelector(".m-linkrow");
+  await page.fill("#m-kbps", "192").catch(() => {});
+  await page.locator("#klang input[type=number]").fill("-14");
+  await page.click("button:has-text('Klang speichern')");
+  await page.waitForSelector("#klang .tr-status-ok");
+  L.ok((await L.api(page, "/settings")).body.audio.target_lufs === -14, "Klang gespeichert (−14 LUFS)");
+  await page.locator("#klang input[type=number]").fill("-16");
+  await page.click("button:has-text('Klang speichern')");
+  await page.fill("#einladungen input[placeholder='Name des Gastes']", "Testgast");
+  await page.click("button:has-text('Einmal-Link erzeugen')");
+  await page.waitForSelector("#m-created .m-url");
+  L.ok(await page.locator("#m-created .m-url").count() === 1, "Einmal-Link erzeugt und angezeigt");
+  await page.locator("li:has-text('Testgast') button:has-text('Widerrufen')").first().click();
+  await page.click("dialog button:has-text('Widerrufen')");
+  await page.waitForSelector("li:has-text('Testgast') >> text=widerrufen");
+  L.ok(true, "Einmal-Link widerrufen");
+  const coverDir = "/tmp/podcast-studio-dev-8195/cover";
+  if (!fs.existsSync("/tmp/e2e-cover.png")) fs.copyFileSync(coverDir + "/" + fs.readdirSync(coverDir)[0], "/tmp/e2e-cover.png");
+  await page.setInputFiles("#m-cover-file", "/tmp/e2e-cover.png");
+  await page.waitForSelector("#cover .tr-status-ok");
+  L.ok(true, "Cover hochgeladen");
+  await page.fill("#m-import-url", "http://127.0.0.1:1/feed.xml");
+  await page.click("button:has-text('Importieren')");
+  await page.waitForSelector("text=Der Import ist fehlgeschlagen", { timeout: 20000 });
+  L.ok(true, "Import mit unerreichbarer Adresse zeigt den Fehler");
+  await page.click("summary:has-text('Feed-Vorschau')");
+  await page.waitForTimeout(800);
+  L.ok((await page.textContent("#feed pre")).length > 20, "Feed-Vorschau geladen");
+  L.ok((await page.textContent("#m-status")).includes("Freier Speicherplatz"), "Systemstatus als Text");
+  L.ok(page.problems.filter((p) => !p.includes("feed/preview") && !/HTTP (409|404)/.test(p)).length === 0, `keine Konsolenfehler ${page.problems}`);
+
+  console.log("Plan");
+  const pp = await L.newPage(b, { allow: ["segments", "draft"] });
+  await mockPlan(pp);
+  await pp.goto(L.BASE + "/plan");
+  await pp.waitForSelector(".m-seg");
+  L.ok((await pp.locator(".m-seg").count()) === 5, "fünf Abschnitte");
+  L.ok(await pp.locator(".m-seg >> nth=0").locator("text=Quelle:").count() > 0, "Dossier mit Quellen sichtbar");
+  await pp.locator("#seg-seg2-input").fill("Neue Stichworte");
+  await pp.waitForSelector("#seg-seg2 :text('Gespeichert')");
+  await pp.click("#seg-seg2 button:has-text('Recherchieren')");
+  await pp.waitForSelector("#seg-seg2 :text('Recherche läuft')");
+  await pp.waitForSelector("#seg-seg2 details.m-dossier", { timeout: 15000 });
+  L.ok(true, "Recherche läuft und liefert ein Dossier");
+  await pp.click("#seg-seg4 button:has-text('Übernehmen') >> nth=0");
+  await pp.waitForFunction(() => document.querySelector("#seg-seg4-title").value === "Das Schloss", null, { timeout: 5000 }).catch(() => {});
+  L.ok((await pp.inputValue("#seg-seg4-title")) === "Das Schloss", "Kandidat übernommen");
+  await pp.click("#seg-seg1 button[aria-label$='nach unten']");
+  await pp.waitForFunction(() => document.querySelectorAll(".m-seg")[2]?.id === "seg-seg1", null, { timeout: 5000 }).catch(() => {});
+  L.ok((await pp.locator(".m-seg").nth(2).getAttribute("id")) === "seg-seg1", "Abschnitt umsortiert");
+  await pp.selectOption("#m-add-kind", "frei");
+  await pp.click("button:has-text('Hinzufügen')");
+  await pp.waitForFunction(() => document.querySelectorAll(".m-seg").length === 6);
+  await pp.click("#seg-seg10 button[aria-label$='löschen']");
+  await pp.click("dialog button:has-text('Löschen')");
+  await pp.waitForFunction(() => document.querySelectorAll(".m-seg").length === 5);
+  await pp.emulateMedia({ media: "print" });
+  L.ok(!(await pp.isVisible(".tr-sidebar")) && !(await pp.isVisible(".m-plan-bar")), "Druckansicht blendet Bedienung aus");
+  await pp.pdf({ path: __dirname + "/shots/plan-print.pdf", format: "A4" });
+  L.ok(pp.problems.length === 0, `keine Konsolenfehler ${pp.problems}`);
+
+  await b.close();
+  L.done();
+})().catch((e) => { console.error(e); process.exit(1); });

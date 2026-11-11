@@ -1,0 +1,29 @@
+{% extends "_base.html" %}
+{% block title %}Anmelden{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/css/studio.css?v={{ v }}">{% endblock %}
+{% block body %}
+<header class="tr-header">
+  <div class="tr-header-inner ps-guest-header">
+    <span class="tr-header-title">{{ show_title }}</span>
+  </div>
+</header>
+<main class="ps-guest-page">
+  <div class="ps-app">
+    {% if setup %}
+    <h1>Einrichtung fehlt</h1>
+    <p class="ps-lead">Die Umgebungsvariable PS_HOST_PASSWORD muss gesetzt werden, mit mindestens 8 Zeichen</p>
+    {% else %}
+    <h1>Anmelden</h1>
+    <form class="ps-login" method="post" action="/login">
+      <input type="hidden" name="next" value="{{ next }}">
+      <div class="tr-field">
+        <label class="tr-label" for="password">Passwort</label>
+        <input class="tr-input{% if error %} is-error{% endif %}" id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+      </div>
+      {% if error %}<p class="ps-error" role="alert">{{ error }}</p>{% endif %}
+      <div><button class="tr-btn tr-btn-primary" type="submit">Anmelden</button></div>
+    </form>
+    {% endif %}
+  </div>
+</main>
+{% endblock %}

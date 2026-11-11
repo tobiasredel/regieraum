@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?><rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom" version="2.0" xmlns:anchor="https://anchor.fm/xmlns" xmlns:podcast="https://podcastindex.org/namespace/1.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:psc="http://podlove.org/simple-chapters">
+	<channel>
+		<title><![CDATA[Die Beispielrunde]]></title>
+		<description><![CDATA[🎙️Καλημέρα! Ein Beispiel-Podcast mit Sonderzeichen: Ä Ö Ü ß 🏀
+
+Zweite Zeile mit „Anführungszeichen“.
+
+🎧Listen - Enjoy - Share
+
+#Beispielrunde]]></description>
+		<link>https://beispielrunde.example/</link>
+		<generator>Anchor Podcasts</generator>
+		<lastBuildDate>Tue, 10 Nov 2026 09:10:04 GMT</lastBuildDate>
+		<atom:link href="https://anchor.fm/s/0a1b2c3d/podcast/rss" rel="self" type="application/rss+xml"/>
+		<author><![CDATA[Beispielrunde]]></author>
+		<copyright><![CDATA[Beispielrunde]]></copyright>
+		<language><![CDATA[el]]></language>
+		<atom:link rel="hub" href="https://pubsubhubbub.appspot.com/"/>
+		<itunes:author>Beispielrunde</itunes:author>
+		<itunes:summary>🎙️Καλημέρα! Ein Beispiel-Podcast mit Sonderzeichen: Ä Ö Ü ß 🏀
+
+Zweite Zeile mit „Anführungszeichen“.
+
+🎧Listen - Enjoy - Share
+
+#Beispielrunde</itunes:summary>
+		<itunes:type>episodic</itunes:type>
+		<itunes:owner>
+			<itunes:name>Beispielrunde</itunes:name>
+			<itunes:email>kontakt@beispielrunde.example</itunes:email>
+		</itunes:owner>
+		<itunes:explicit>false</itunes:explicit>
+		<itunes:category text="Sports">
+			<itunes:category text="Basketball"/>
+		</itunes:category>
+		<itunes:image href="https://d3t3ozftmdmh3i.cloudfront.net/staging/podcast_uploaded_nologo/10000001/10000001-1725277704829-0000000000001.jpg"/>
+		<item>
+			<title><![CDATA[Καλημέρα κόσμε ! 🔥 | Sample Round 11 Preview]]></title>
+			<description><![CDATA[<p>🏀 <strong>Καλημέρα κόσμε, kurze Antworten! 🔥</strong></p>]]></description>
+			<link>https://podcasters.spotify.com/pod/show/beispielrunde/episodes/sample-round-11-preview</link>
+			<guid isPermaLink="false">11111111-aaaa-4aaa-8aaa-000000000001</guid>
+			<dc:creator><![CDATA[Beispielrunde]]></dc:creator>
+			<pubDate>Tue, 10 Nov 2026 06:00:00 GMT</pubDate>
+			<enclosure url="https://anchor.fm/s/0a1b2c3d/podcast/play/100000001/https%3A%2F%2Fd3ctxlq1ktw2nl.cloudfront.net%2Fstaging%2F2026-10-9%2F100000001-44100-2-aaaaaaaaaaaaaa.mp3" length="44945657" type="audio/mpeg"/>
+			<itunes:summary>&lt;p&gt;🏀 &lt;strong&gt;Καλημέρα κόσμε, kurze Antworten! 🔥&lt;/strong&gt;&lt;/p&gt;</itunes:summary>
+			<itunes:explicit>false</itunes:explicit>
+			<itunes:duration>00:46:49</itunes:duration>
+			<itunes:image href="https://d3t3ozftmdmh3i.cloudfront.net/staging/podcast_uploaded_episode/10000001/10000001-1794255195068-0000000000002.jpg"/>
+			<itunes:season>8</itunes:season>
+			<itunes:episode>31</itunes:episode>
+			<itunes:episodeType>full</itunes:episodeType>
+		</item>
+		<item>
+			<title><![CDATA[S05 - Ep 106 - Sample Season 2023-2024 Road Part 2: Καλημέρα]]></title>
+			<description><![CDATA[<p>Zweite Beispielfolge mit längerem Text, damit Kurzfassung und Beschreibung auseinanderfallen. Καλημέρα κόσμε.</p>]]></description>
+			<link>https://podcasters.spotify.com/pod/show/beispielrunde/episodes/sample-season-road-part-2</link>
+			<guid isPermaLink="false">11111111-aaaa-4aaa-8aaa-000000000002</guid>
+			<dc:creator><![CDATA[Beispielrunde]]></dc:creator>
+			<pubDate>Tue, 21 May 2024 06:00:00 GMT</pubDate>
+			<enclosure url="https://anchor.fm/s/0a1b2c3d/podcast/play/100000002/https%3A%2F%2Fd3ctxlq1ktw2nl.cloudfront.net%2Fstaging%2F2024-4-20%2F100000002-aaaa-bbbb-cccc-000000000002.m4a" length="98603988" type="audio/x-m4a"/>
+			<itunes:summary>&lt;p&gt;Zweite Beispielfolge mit längerem Text, damit Kurzfassung und Beschreibung auseinanderfallen. Καλημέρα κόσμε.&lt;/p&gt;</itunes:summary>
+			<itunes:explicit>false</itunes:explicit>
+			<itunes:duration>01:43:28</itunes:duration>
+			<itunes:image href="https://d3t3ozftmdmh3i.cloudfront.net/staging/podcast_uploaded_episode/10000001/10000001-1716244011903-0000000000003.jpg"/>
+			<itunes:season>5</itunes:season>
+			<itunes:episode>106</itunes:episode>
+			<itunes:episodeType>full</itunes:episodeType>
+		</item>
+		<item>
+			<title><![CDATA[S02 - Special - LiveShow E01 - We are live!]]></title>
+			<description><![CDATA[<p>Dritte Beispielfolge, live aufgenommen (anhören)!</p>]]></description>
+			<link>https://podcasters.spotify.com/pod/show/beispielrunde/episodes/liveshow-e01-we-are-live</link>
+			<guid isPermaLink="false">11111111-aaaa-4aaa-8aaa-000000000003</guid>
+			<dc:creator><![CDATA[Beispielrunde]]></dc:creator>
+			<pubDate>Mon, 27 Sep 2021 10:36:28 GMT</pubDate>
+			<enclosure url="https://anchor.fm/s/0a1b2c3d/podcast/play/100000003/https%3A%2F%2Fd3ctxlq1ktw2nl.cloudfront.net%2Fproduction%2F2021-8-27%2F100000003-44100-2-bbbbbbbbbbbbb.mp3" length="78672144" type="audio/mpeg"/>
+			<itunes:summary>&lt;p&gt;Dritte Beispielfolge, live aufgenommen (anhören)!&lt;/p&gt;</itunes:summary>
+			<itunes:explicit>false</itunes:explicit>
+			<itunes:duration>01:21:53</itunes:duration>
+			<itunes:image href="https://d3t3ozftmdmh3i.cloudfront.net/production/podcast_uploaded400/10000001/10000001-1632575596710-0000000000004.jpg"/>
+			<itunes:season>2</itunes:season>
+			<itunes:episode>11</itunes:episode>
+			<itunes:episodeType>full</itunes:episodeType>
+		</item>
+	</channel>
+</rss>

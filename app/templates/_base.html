@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#F5F7FA">
+<meta name="robots" content="noindex,nofollow">
+<title>{% block title %}Podcast-Studio{% endblock %} · {{ show_title }}</title>
+<link rel="stylesheet" href="/static/design/tokens-unprefixed.css?v={{ v }}">
+<link rel="stylesheet" href="/static/design/components.css?v={{ v }}">
+<link rel="stylesheet" href="/static/design/app-basis.css?v={{ v }}">
+<link rel="stylesheet" href="/static/css/app.css?v={{ v }}">
+{% block head %}{% endblock %}
+<script src="/static/design/app-basis.js?v={{ v }}" defer></script>
+</head>
+<body{% block body_attrs %}{% endblock %}>
+{% block body %}{% endblock %}
+{% block scripts %}{% endblock %}
+</body>
+</html>

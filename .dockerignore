@@ -1,0 +1,10 @@
+.git
+.claude
+__pycache__
+*.pyc
+.pytest_cache
+node_modules
+data
+tests/e2e/shots
+tests/e2e-manage/shots
+*.env

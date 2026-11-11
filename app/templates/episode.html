@@ -1,0 +1,13 @@
+{% extends "_layout.html" %}
+{% set active = "episodes" %}
+{% block title %}Folge prüfen{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/css/manage.css?v={{ v }}">{% endblock %}
+{% block content %}
+<div class="m-page m-page-wide">
+  <div id="app" data-episode="{{ episode_id }}">
+    <p class="tr-small">Folge wird geladen</p>
+    <noscript><p>Diese Seite braucht JavaScript</p></noscript>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script type="module" src="/static/js/manage/episode.js?v={{ v }}"></script>{% endblock %}

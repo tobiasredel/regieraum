@@ -1,0 +1,18 @@
+{% extends "_base.html" %}
+{% block title %}Beitreten{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/css/studio.css?v={{ v }}">{% endblock %}
+{% block body %}
+<header class="tr-header">
+  <div class="tr-header-inner ps-guest-header">
+    <span class="tr-header-title">{{ show_title }}</span>
+  </div>
+</header>
+<main class="ps-guest-page">
+  <div id="ps-app" class="ps-app" data-role="guest" data-invite="{{ token }}">
+    <h1>Beitreten</h1>
+    <p class="ps-lead">Wird geladen</p>
+    <noscript><p class="ps-error">Das Studio braucht JavaScript</p></noscript>
+  </div>
+</main>
+{% endblock %}
+{% block scripts %}<script type="module" src="/static/js/studio/main.js?v={{ v }}"></script>{% endblock %}

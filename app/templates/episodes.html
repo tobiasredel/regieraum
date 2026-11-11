@@ -1,0 +1,15 @@
+{% extends "_layout.html" %}
+{% set active = "episodes" %}
+{% block title %}Folgen{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/css/manage.css?v={{ v }}">{% endblock %}
+{% block content %}
+<div class="m-page">
+  <p class="tr-eyebrow mit-punkt">Sendung</p>
+  <h1 class="m-h1">Folgen</h1>
+  <div id="app" class="m-section">
+    <p class="tr-small">Folgen werden geladen</p>
+    <noscript><p>Diese Seite braucht JavaScript</p></noscript>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script type="module" src="/static/js/manage/episodes.js?v={{ v }}"></script>{% endblock %}

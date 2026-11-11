@@ -1,0 +1,19 @@
+# --- Server (app/) ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+jinja2==3.1.5
+python-multipart==0.0.20
+httpx==0.28.1
+# --- Audio-Pipeline (pipeline/) ---
+numpy==2.2.1
+scipy==1.15.0
+soundfile==0.13.0
+pyloudnorm==0.1.1
+mutagen==1.47.0
+faster-whisper==1.1.1
+soxr==1.1.0
+# --- Veröffentlichung (publish/) ---
+boto3==1.35.90
+defusedxml==0.7.1
+nh3==0.2.20
+anthropic>=0.75

@@ -1,0 +1,31 @@
+/* Gemeinsame Ergänzungen zum Thema für alle Seiten der App.
+   Nur, was app-basis.css nicht liefert. Werte stammen aus den Tokens. */
+
+
+/* Tastenkappe: alles, was sich per Taste auslösen lässt, zeigt seine Taste */
+.app-kbd, .ps-kbd { display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 20px; height: 20px; padding: 0 var(--space-1); border-radius: var(--radius-sm); background: var(--paper); border: 1px solid var(--line); color: var(--slate); font: 500 12px/1 var(--font-sans); }
+
+/* Nur für Screenreader sichtbar */
+.app-vh { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+/* Zeile aus Schaltflächen und Text, bricht um */
+.app-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-top: var(--space-4); }
+
+/* Fortschritt: ink auf line, keine Animation (der Wert ist die Anzeige) */
+.app-progress { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; margin-top: var(--space-2); max-width: 480px; }
+.app-progress > span { display: block; height: 100%; background: var(--ink); }
+
+/* Fehlertext in danger, wie das Thema ihn für Felder vorsieht */
+.tr-error { margin: var(--space-2) 0 0; }
+
+/* Schaltflächen in Zeilen mit Icon und Text nicht umbrechen lassen */
+.tr-btn { white-space: nowrap; }
+.tr-btn .tr-icon { color: inherit; }
+
+/* Auswahlfelder: das Thema sieht nur Texteingaben vor.
+   TODO(design): Select-Muster fehlt, hier gleiche Höhe, Rahmen und Radius wie tr-input */
+select.tr-input { appearance: auto; padding-right: var(--space-2); }
+
+/* Abmelden in der Seitenleiste: Button im Look eines Navigationspunkts */
+.ps-logout { margin: var(--space-5) 0 0; }
+.ps-logout button.tr-nav-item { width: 100%; border: 0; background: none; font-family: inherit; cursor: pointer; text-align: left; }

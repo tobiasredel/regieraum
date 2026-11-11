@@ -1,0 +1,58 @@
+/* Standard-Thema von Regieraum (neutral, Akzent Kobaltblau). Schnittstelle siehe docs/THEME.md.
+   Die Variablen --petrol* heißen aus Kompatibilität so; sie sind schlicht „die Akzentfarbe“.
+   Theme hell; [data-theme="dark"] für dunkle Akzentflächen. */
+:root {
+  --paper: #F5F7FA;
+  --surface: #FFFFFF;
+  --ink: #111827;
+  --slate: #4B5565;
+  --muted: #6B7487;
+  --line: #DDE1E8;
+  --petrol: #2447C9;
+  --petrol-dark: #1B38A0;
+  --petrol-tint: #E8EDFB;
+  --on-petrol: #FFFFFF;
+  --sand: #A8894A;
+  --steel: #6B7A90;
+  --success: #1B7A45;
+  --warning: #8A5A00;
+  --danger: #B42318;
+  --danger-dark: #8A1A12;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-9: 96px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 1px 2px rgba(17,24,39,0.06);
+  --shadow-md: 0 8px 24px rgba(17,24,39,0.10);
+  --dur-fast: 150ms;
+  --dur-base: 200ms;
+  --dur-slow: 400ms;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --font-serif: Georgia, "Times New Roman", serif;
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+[data-theme="dark"] {
+  --paper: #0F131A;
+  --surface: #171C26;
+  --ink: #E8ECF2;
+  --slate: #A3ACBA;
+  --muted: #8791A3;
+  --line: #2B3340;
+  --petrol: #7C99F2;
+  --petrol-dark: #A3B8F7;
+  --petrol-tint: #1D2A52;
+  --on-petrol: #0F131A;
+  --sand: #C4A769;
+  --steel: #8FA0BC;
+  --success: #5FBF8A;
+  --warning: #E0AE55;
+  --danger: #F2837B;
+}

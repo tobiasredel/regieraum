@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+node_modules/
+/data/
+*.env
+.DS_Store
+test-results/
+tests/e2e/shots/
+tests/e2e-manage/shots/
+.claude/

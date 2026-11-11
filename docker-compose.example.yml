@@ -1,0 +1,27 @@
+# Regieraum – example for a single server. Copy to docker-compose.yml, create .env from .env.example, then:
+#   docker compose up -d --build
+# Put a reverse proxy with TLS in front (see README: WebSocket pass-through and Permissions-Policy).
+services:
+  regieraum:
+    build: .
+    image: regieraum:local
+    container_name: regieraum
+    init: true                # jobs run as subprocesses
+    restart: unless-stopped
+    user: "1000:1000"
+    mem_limit: 6g             # audio processing and transcription are memory hungry
+    env_file: .env
+    environment:
+      HOME: /tmp
+      TZ: Europe/Berlin
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+      # Optional: your own theme, see docs/THEME.md
+      # - ./my-theme:/srv/app/static/design:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

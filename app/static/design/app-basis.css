@@ -1,0 +1,133 @@
+/* Standard-Thema von Regieraum: App-Basis. Schnittstelle siehe docs/THEME.md.
+   Reihenfolge: 1. tokens-unprefixed.css, 2. components.css, 3. app-basis.css.
+   Ergänzt Typo-Skala, Grundstile, App-Rahmen mit Navigation, Listen, Tabellen, Status, Toast und Modal.
+   Schriften sind System-Stacks (siehe --font-sans/--font-serif); --petrol* ist die Akzentfarbe.
+   Geprüft mit unslop (Damir Sokolovsky, @heydamir, CC BY 4.0). Kein Dark Mode im Web. */
+
+
+:root{
+  /* Typo-Skala */
+  --fs-display:clamp(2.25rem,1.4rem + 3.6vw,3.5rem);--fs-h1:clamp(1.75rem,1.4rem + 1.4vw,2.25rem);
+  --fs-h2:clamp(1.375rem,1.15rem + .9vw,1.75rem);--fs-h3:clamp(1.125rem,1.05rem + .3vw,1.25rem);
+  --fs-body:clamp(1rem,.95rem + .25vw,1.125rem);--fs-small:.875rem;--fs-figure:clamp(2.75rem,2.2rem + 2.2vw,3.5rem);
+  --lh-tight:1.15;--lh-body:1.6;
+  /* Dunkle Akzentflächen: nur CTA-Band und Footer */
+  --dark-bg:#0F131A;--dark-ink:#E8ECF2;--dark-slate:#A3ACBA;--dark-petrol:#7C99F2;--on-dark-petrol:#0F131A;--dark-petrol-hover:#A3B8F7;
+  /* Layout: Container 1200 px, einspaltige Werkzeuge 720 px, Seitenleiste 264 px */
+  --container:1200px;--column:720px;--sidebar:264px;
+  --focus:0 0 0 2px var(--paper),0 0 0 4px var(--petrol);
+  --focus-inset:inset 0 0 0 2px var(--petrol);
+  color-scheme:light;
+}
+
+/* ---- Grundstile ---- */
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--paper);color:var(--ink);font:400 var(--fs-body)/var(--lh-body) var(--font-sans);-webkit-text-size-adjust:100%;overflow-wrap:anywhere}
+h1,h2,.tr-display{font-family:var(--font-serif);font-weight:500;line-height:var(--lh-tight);margin:0}
+h1{font-size:var(--fs-h1)}
+h2{font-size:var(--fs-h2);line-height:1.2}
+.tr-display{font-size:var(--fs-display);line-height:1.05;letter-spacing:-.02em}
+h3{font-family:var(--font-sans);font-size:var(--fs-h3);line-height:1.3;font-weight:500;margin:0}
+p{margin:0}
+p+p{margin-top:var(--space-4)}
+a{color:var(--petrol);text-underline-offset:4px;transition:color var(--dur-fast) var(--ease)}
+a:hover{color:var(--petrol-dark)}
+:focus-visible{outline:none;box-shadow:var(--focus)}
+small,.tr-small{font-size:var(--fs-small);line-height:1.5;color:var(--slate)}
+table,.tr-figure,.tr-num{font-variant-numeric:tabular-nums}
+.tr-figure{font:500 var(--fs-figure)/1 var(--font-serif);letter-spacing:-.01em;color:var(--petrol)}
+button{font:inherit;color:inherit}
+
+/* ---- Ergänzungen zu components.css ---- */
+.tr-card{max-width:none}
+.tr-btn-nav{height:36px}
+textarea.tr-input{height:auto;min-height:88px;padding:12px;line-height:1.5;resize:vertical}
+textarea.tr-input:focus{padding:11px}
+/* Kapitel-Label mit Akzent-Punkt als Pseudoelement (eine der vier erlaubten Stellen für den Punkt) */
+.tr-eyebrow.mit-punkt::before{content:"";flex:none;width:6px;height:6px;border-radius:50%;background:var(--petrol)}
+
+/* ---- Rahmen ---- */
+/* Kopfleiste: 64 px, paper, Linie unten; Schatten erst beim Scrollen und ohne Animation */
+.tr-header{position:sticky;top:0;z-index:10;min-height:64px;display:flex;align-items:center;background:var(--paper);border-bottom:1px solid var(--line);padding:0 max(20px,env(safe-area-inset-left))}
+.tr-header.is-scrolled{box-shadow:var(--shadow-sm)}
+.tr-header-inner{width:100%;max-width:var(--container);margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:var(--space-4)}
+.tr-header-title{font:500 20px/1.3 var(--font-serif)}
+.tr-menu-button{display:none}
+/* Einspaltiges Werkzeug (Formular, Chat, Einstellungen): eine Spalte von 720 px */
+.tr-page{max-width:var(--column);margin:0 auto;padding:var(--space-6) max(20px,env(safe-area-inset-left)) var(--space-8)}
+.tr-header-inner.schmal{max-width:var(--column)}
+/* Im App-Rahmen beginnt der Titel auf der Linie der Seitenleiste */
+.tr-header-inner.breit{max-width:none;padding-left:4px}
+/* App mit Navigation: Seitenleiste 264 px und Inhalt, zusammen höchstens Container plus Leiste */
+.tr-shell{display:grid;grid-template-columns:var(--sidebar) minmax(0,1fr);min-height:calc(100vh - 64px)}
+.tr-sidebar{background:var(--surface);border-right:1px solid var(--line);padding:var(--space-4) var(--space-3)}
+.tr-content{width:100%;max-width:var(--container);padding:var(--space-6) var(--space-6) var(--space-8)}
+@media (max-width:1023px){
+  .tr-shell{grid-template-columns:minmax(0,1fr)}
+  .tr-menu-button{display:inline-flex}
+  /* Seitenleiste als Menü unter der Kopfleiste, geöffnet über tr-menu-button (app-basis.js) */
+  .tr-sidebar{display:none;position:sticky;top:64px;z-index:9;border-right:0;border-bottom:1px solid var(--line)}
+  .tr-shell.nav-offen .tr-sidebar{display:block}
+  .tr-content{padding:var(--space-5) max(20px,env(safe-area-inset-left)) var(--space-8)}
+}
+
+/* ---- Navigation: Zeilen 36 px, 2 px Abstand, Abschnitts-Label 24 px darüber und 8 px darunter ---- */
+.tr-nav{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.tr-nav-label{font:500 14px/1.4 var(--font-sans);color:var(--slate);margin:var(--space-5) var(--space-3) var(--space-2)}
+.tr-nav-label:first-child{margin-top:0}
+.tr-nav-item{display:flex;align-items:center;gap:var(--space-2);height:36px;padding:0 var(--space-3);border-radius:var(--radius-md);color:var(--slate);text-decoration:none;font-size:16px;line-height:1;transition:background-color var(--dur-fast) var(--ease),color var(--dur-fast) var(--ease)}
+.tr-nav-item:hover{background:var(--paper);color:var(--ink)}
+.tr-nav-item:focus-visible{box-shadow:var(--focus-inset)}
+/* Aktiv: kleiner Flächenschritt mit Linie, Text ink. Keine Akzentfarbe, kein Punkt */
+.tr-nav-item[aria-current="page"]{background:var(--paper);color:var(--ink);font-weight:500;box-shadow:inset 0 0 0 1px var(--line)}
+.tr-nav-item .tr-icon{color:inherit}
+
+/* ---- Abschnitte und Listen ---- */
+.tr-section{margin-top:var(--space-6)}
+.tr-section-label{font:500 14px/1.4 var(--font-sans);color:var(--slate);margin:0 0 var(--space-2)}
+.tr-list{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);overflow:hidden}
+.tr-list>li+li{border-top:1px solid var(--line)}
+.tr-item{display:flex;align-items:center;gap:var(--space-2);min-height:56px;padding:var(--space-3) var(--space-4);color:var(--ink);text-decoration:none}
+a.tr-item{transition:background-color var(--dur-fast) var(--ease)}
+a.tr-item:hover{background:var(--paper);color:var(--ink)}
+/* Die Liste schneidet außen liegende Ringe ab, deshalb Fokus innen */
+.tr-list .tr-item:focus-visible{box-shadow:var(--focus-inset)}
+.tr-item-text{flex:1;min-width:0}
+.tr-item-text strong{display:block;font-weight:500;font-size:16px;line-height:1.5}
+.tr-item-text span{display:block;font-size:14px;line-height:1.4;color:var(--slate)}
+
+/* ---- Tabellen: Kopfzeile 1 px ink, Zeilen 1 px line, keine senkrechten Linien ---- */
+.tr-table-wrap{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg);overflow-x:auto}
+.tr-table{width:100%;border-collapse:collapse;font-size:16px;line-height:1.5;overflow-wrap:normal}
+@media (max-width:639px){.tr-table td{white-space:nowrap}}
+.tr-table th{font:500 14px/1.4 var(--font-sans);color:var(--slate);text-align:left;padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--ink);white-space:nowrap}
+.tr-table td{padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--line);vertical-align:top}
+.tr-table tbody tr:last-child td{border-bottom:0}
+.tr-table .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tr-table tbody tr{transition:background-color var(--dur-fast) var(--ease)}
+.tr-table tbody tr:hover{background:var(--paper)}
+/* Auswahlzeile in --petrol-tint (Akzent-Tint) */
+.tr-table tbody tr[aria-selected="true"]{background:var(--petrol-tint)}
+.tr-table tbody tr:focus-visible{box-shadow:var(--focus-inset)}
+
+/* ---- Icons: Lucide, Outline 1,5 px, 20 px, Farbe der Textrolle, nie Akzentfarbe ---- */
+.tr-icon{flex:none;width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;color:var(--slate)}
+
+/* ---- Status steht im Text: keine Punkte, keine farbigen Flächen ---- */
+.tr-status-ok,.tr-item-text span.tr-status-ok{color:var(--success)}
+.tr-status-warn,.tr-item-text span.tr-status-warn{color:var(--warning)}
+.tr-status-error,.tr-item-text span.tr-status-error{color:var(--danger)}
+
+/* ---- Schwebende Elemente: die einzigen mit Schatten ---- */
+.tr-toast{position:fixed;left:50%;top:calc(var(--space-3) + env(safe-area-inset-top));transform:translateX(-50%);z-index:20;max-width:calc(100% - 32px);background:var(--ink);color:var(--surface);border-radius:var(--radius-md);box-shadow:var(--shadow-md);padding:var(--space-3) var(--space-4);font-size:var(--fs-small);line-height:1.5}
+.tr-modal{border:0;border-radius:var(--radius-lg);background:var(--surface);color:var(--ink);padding:var(--space-5);width:min(100% - 32px,480px);box-shadow:var(--shadow-md)}
+.tr-modal::backdrop{background:rgba(17,24,39,.4)}
+
+/* ---- Dunkles CTA-Band bzw. Footer ---- */
+.tr-dark{background:var(--dark-bg);color:var(--dark-ink)}
+.tr-dark a{color:var(--dark-petrol)}
+.tr-dark .tr-btn-primary{background:var(--dark-petrol);color:var(--on-dark-petrol)}
+.tr-dark .tr-btn-primary:hover{background:var(--dark-petrol-hover)}
+
+@media (prefers-reduced-motion:reduce){*{transition-duration:0ms!important;animation:none!important}}
