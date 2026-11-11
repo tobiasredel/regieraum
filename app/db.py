@@ -62,6 +62,10 @@ MIGRATIONS: list[str] = [
     CREATE INDEX cards_episode ON cards(episode_id, server_ms);
     ALTER TABLE sounds ADD COLUMN segment_kind TEXT;
     """,
+    # Version 3: mehrere Vorbereitungen nebeneinander; jede ist eine Folge im Zustand draft mit Arbeitstitel
+    """
+    ALTER TABLE episodes ADD COLUMN label TEXT NOT NULL DEFAULT '';
+    """,
 ]
 
 DEFAULT_PLAN: list[tuple[str, str | None]] = [

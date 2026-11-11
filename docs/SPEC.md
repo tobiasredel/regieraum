@@ -227,8 +227,8 @@ jobs(id PK, episode_id, kind, status, progress, message, log, created_at, starte
 
 Folgen-Ablauf: `draft` (im Studio angelegt) → `recording` → `uploading` (gestoppt, Chunks fehlen noch) → `processing`
 → `review` → `scheduled` oder `published`. Fehler führen nach `failed` mit Meldung im letzten Job; von dort lässt sich
-die Verarbeitung neu starten. Es gibt immer höchstens eine Folge im Zustand `draft`, `recording` oder `uploading`
-(„die aktuelle Folge“ des Studios).
+die Verarbeitung neu starten. Es gibt höchstens eine Folge im Zustand `recording` oder `uploading`; Folgen im Zustand `draft` sind Vorbereitungen,
+davon beliebig viele (siehe „Mehrere Vorbereitungen“).
 
 ## 6. WebSocket `/ws/p?token=…`
 
@@ -325,7 +325,10 @@ GET    /episodes          → Liste (ohne große Felder)
 GET    /episodes/{id}     → Folge mit tracks, events, jobs, report, ai, Kapitelvorschau
 PATCH  /episodes/{id}     {title?, number?, season?, summary?, description_html?, explicit?, episode_type?, edl?, chapter_titles?}
 DELETE /episodes/{id}     nur draft, review, failed
-POST   /episodes/{id}/discard {drop_plan?}        Aufnahme verwerfen, Sendeplan behalten (siehe unten)
+POST   /episodes/{id}/discard                     Aufnahme verwerfen, die Folge wird wieder Vorbereitung (siehe unten)
+GET    /preparations                             Vorbereitungen und Wahl des Studios {preparations, selected, busy}
+POST   /preparations {label?}                    neue Vorbereitung mit Standardplan
+PUT    /studio/preparation {episode_id|null}     worauf die nächste Aufnahme aufbaut (null: ohne Vorbereitung)
 POST   /episodes/{id}/process          Verarbeitung komplett neu
 POST   /episodes/{id}/remix            nur Mischung und Encoding neu (nach Schnitt oder Titeländerung)
 POST   /episodes/{id}/suggest          Shownotes-Vorschlag neu
@@ -547,13 +550,22 @@ löscht ihre Dateien.
 Aufnahme verwerfen und neu aufnehmen (Ergänzung 11.11.2026): `POST /episodes/{id}/discard` geht bei `uploading`,
 `processing`, `review` und `failed` (nicht während `recording`, nicht bei importierten Folgen). Wartende Jobs der Folge
 werden gestrichen, ein laufender Pipeline-Unterprozess beendet (`Runner.cancel_episode`, ohne Fehleralarm), dann
-verschwinden Spuren, Ereignisse, Jobs, Karten und Dateien. Der Sendeplan (Abschnitte, Eingaben, Notizen, Dossiers) wandert
-in den aktuellen Entwurf und die Besuchsmarken werden zurückgesetzt; gibt es keinen Entwurf, entsteht einer. Hat der
-Entwurf schon einen eigenen Plan oder läuft bereits eine neue Aufnahme, antwortet der Server mit `409 plan_conflict`
-und verwirft erst mit `drop_plan: true` (dann ohne Übernahme). Antwort `{discarded, plan: moved | none | dropped,
-episode_id}`. Der Raum bekommt `{type: "rec.discard", episode_id}`: Die Rekorder lassen ihre Spuren dieser Folge fallen
-und das Studio ist wieder „Bereit“. Bedienung: Knopf „Aufnahme verwerfen“ beim Host nach dem Beenden (im Studio) und
-Abschnitt „Neu aufnehmen“ auf der Folgenseite. Prüfung: `tests/e2e/discard.mjs`.
+verschwinden Spuren, Ereignisse, Jobs, Karten, Dateien sowie Schnitt, Angaben und Bericht. Die Folge selbst wird wieder
+zur Vorbereitung (`draft`) mit Sendeplan, Dossiers, Notizen und Arbeitstitel; Besuchsmarken werden zurückgesetzt, und
+das Studio wählt sie für die nächste Aufnahme. Antwort `{discarded, episode_id}`. Der Raum bekommt
+`{type: "rec.discard", episode_id}`: Die Rekorder lassen ihre Spuren dieser Folge fallen und das Studio ist wieder
+„Bereit“. Bedienung: Knopf „Aufnahme verwerfen“ beim Host nach dem Beenden (im Studio) und Abschnitt „Neu aufnehmen“
+auf der Folgenseite. Prüfung: `tests/e2e/discard.mjs`.
+
+Mehrere Vorbereitungen (Ergänzung 11.11.2026): Eine Vorbereitung ist eine Folge im Zustand `draft` mit Sendeplan und
+Arbeitstitel (`episodes.label`, Migration 3); davon kann es beliebig viele geben. Die Seite „Vorbereitung“ wählt,
+legt an, benennt und löscht sie (`?id=` merkt sich die offene). Das Studio legt vor dem Start fest, worauf die
+Aufnahme aufbaut („Aufbauen auf“): eine Vorbereitung oder „Ohne Vorbereitung“. Die Wahl liegt in der Einstellung
+`studio = {episode_id}` (`null` = ohne); fehlt sie, gilt die neueste Vorbereitung. `core.current_episode` liefert eine
+laufende Aufnahme oder einen laufenden Upload, sonst die gewählte Vorbereitung; ohne Vorbereitung gibt es vor dem
+Start keine Folge, `rec.start` legt dann eine leere an. Jeder Start setzt die Wahl zurück. Der Raumzustand des Hosts
+trägt `preparations` und `prep_id`. Die Folgenliste zeigt Vorbereitungen nicht, sondern nennt nur ihre Zahl.
+Prüfung: `tests/e2e/preps.mjs`.
 
 Show-Daten und Cover stehen im Feed. Deshalb bauen `PUT /settings` (mit `show`) und `POST /settings/cover` den Feed sofort
 neu, sobald mindestens eine Folge veröffentlicht ist (`publishing.refresh_feed`, lädt auch ein neues Cover hoch). Scheitert

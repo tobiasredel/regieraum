@@ -42,12 +42,18 @@ async function mockPlan(page, { missing = false } = {}) {
   const researching = new Map();
   const json = (route, body, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
   const err = (route, status, code, message) => json(route, { error: { code, message } }, status);
-  await page.route(/\/api\/host\/(episodes(\/draft|\/[^/]+\/segments.*)?|segments\/.*)$/, async (route) => {
+  const prep = { id: "demodraft", label: "", title: null, number: 14, created_at: Date.parse("2026-11-10T09:00:00Z"), segments: segs.length, ready: 2 };
+  await page.route(/\/api\/host\/(episodes(\/draft|\/demodraft|\/[^/]+\/segments.*)?|segments\/.*|preparations|studio\/preparation)$/, async (route) => {
     const req = route.request();
     const url = new URL(req.url());
     const p = url.pathname.replace("/api/host", "");
     const m = req.method();
-    if (missing && /segments|draft/.test(p)) return err(route, 404, "not_found", "Nicht gefunden");
+    if (missing && /segments|draft|preparations/.test(p)) return err(route, 404, "not_found", "Nicht gefunden");
+    if (p === "/preparations" && m === "GET") return json(route, { preparations: [prep], selected: prep.id, busy: false });
+    if (p === "/preparations" && m === "POST") return json(route, { id: prep.id, status: "draft", label: "" }, 201);
+    if (p === "/studio/preparation" && m === "PUT") return json(route, { preparations: [prep], selected: prep.id, busy: false });
+    if (p === "/episodes/demodraft" && m === "PATCH") { Object.assign(prep, JSON.parse(req.postData() || "{}")); return json(route, prep); }
+    if (p === "/episodes/demodraft") return json(route, { deleted: true });
     if (p === "/episodes" && m === "GET") {
       const real = await (await route.fetch()).json();
       return json(route, [{ id: "demodraft", status: "draft", source: "recorded", number: 14, title: null, duration_ms: null, job: null }, ...real.filter((e) => e.status !== "draft")]);

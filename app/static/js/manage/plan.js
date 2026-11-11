@@ -1,7 +1,9 @@
 // Vorbereitung: Sendeplan der nächsten Folge mit Dossiers (SPEC Abschnitt 14).
 // Erwartete Aufrufe:
-//   GET    /api/host/episodes                         aktuelle Folge = Status draft (sonst recording oder uploading)
-//   POST   /api/host/episodes/draft                   legt eine Entwurfsfolge an, wenn es keine gibt
+//   GET    /api/host/preparations                     alle Vorbereitungen (Folgen im Zustand draft) und die Wahl des Studios
+//   POST   /api/host/preparations {label?}            neue Vorbereitung mit Standardplan
+//   PUT    /api/host/studio/preparation {episode_id}  im Studio verwenden
+//   PATCH  /api/host/episodes/{id} {label}            Arbeitstitel; DELETE /api/host/episodes/{id} löscht die Vorbereitung
 //   GET    /api/host/episodes/{id}/segments
 //   POST   /api/host/episodes/{id}/segments           {kind, title?, input?, good_type?}
 //   PATCH  /api/host/segments/{id}                    {title?, input?, good_type?, notes?}
@@ -13,7 +15,7 @@ import {
 } from "./common.js";
 
 const root = $("#app");
-const state = { episode: null, segments: [], stop: null, cards: new Map(), unavailable: false, format: null };
+const state = { episode: null, segments: [], stop: null, cards: new Map(), unavailable: false, format: null, preps: [], studio: null, busy: false };
 
 // Namen der Abschnittsarten und der Standardplan kommen aus den Einstellungen (Sendeformat); die Schlüssel sind fest
 const defaultLabels = () => ({ blitzlicht: t("Kurzthema"), hauptthema: t("Hauptthema"), good: t("Empfehlung"), frei: t("Freier Abschnitt"), read: t("Lesetipp"), watch: t("Sehtipp"), listen: t("Hörtipp") });
@@ -30,26 +32,125 @@ const STATUS = {
 // --- Laden ---------------------------------------------------------------------------------------
 async function start() {
   try {
-    const [list, settings] = await Promise.all([api("/episodes"), api("/settings").catch(() => null)]);
+    const settings = await api("/settings").catch(() => null);
     state.format = settings && settings.format;
-    let cur = list.find((e) => e.status === "draft") || list.find((e) => e.status === "recording" || e.status === "uploading");
-    if (!cur) {
-      try {
-        const made = await api("/episodes/draft", { method: "POST" });
-        cur = made && (made.episode || made);
-      } catch (e) {
-        if (e.status === 404 || e.status === 405) return unavailable(t("Eine neue Folge lässt sich auf diesem Server noch nicht aus der Vorbereitung anlegen. Sie entsteht beim Öffnen des Studios."));
-        throw e;
-      }
+    try {
+      await loadPreps();
+    } catch (e) {
+      if (e.status === 404 || e.status === 405) return unavailable(t("Eine neue Folge lässt sich auf diesem Server noch nicht aus der Vorbereitung anlegen. Sie entsteht beim Öffnen des Studios."));
+      throw e;
     }
-    if (!cur || !cur.id) return unavailable(t("Es gibt keine aktuelle Folge"));
-    state.episode = cur;
-    await loadSegments();
-    render();
-    schedulePoll();
+    if (!state.preps.length) {
+      await api("/preparations", { method: "POST", json: {} });
+      await loadPreps();
+    }
+    const wanted = new URLSearchParams(location.search).get("id");
+    const first = state.preps.find((p) => p.id === wanted) || state.preps.find((p) => p.id === state.studio) || state.preps[0];
+    if (!first) return unavailable(t("Es gibt keine aktuelle Folge"));
+    await choose(first.id);
   } catch (e) {
     clear(root);
     root.append(h("p", { class: "tr-error", role: "alert" }, t("Die Vorbereitung konnte nicht geladen werden. {message}", { message: errorText(e) })));
+  }
+}
+
+async function loadPreps() {
+  const res = await api("/preparations");
+  state.preps = res.preparations || [];
+  state.studio = res.selected;
+  state.busy = !!res.busy;
+}
+
+/** Eine Vorbereitung öffnen; die Adresse merkt sie sich (?id=…). */
+async function choose(id) {
+  state.stop?.();
+  state.episode = state.preps.find((p) => p.id === id);
+  try { history.replaceState(null, "", `?id=${encodeURIComponent(id)}`); } catch { /* egal */ }
+  await loadSegments();
+  render();
+  schedulePoll();
+}
+
+/** Name einer Vorbereitung: Arbeitstitel, sonst Folgennummer, sonst Datum. */
+function prepName(p) {
+  if (p.label) return p.label;
+  if (p.number != null) return t("Folge {n}", { n: p.number });
+  return t("Vorbereitung vom {date}", { date: fmtDate(p.created_at) });
+}
+
+/** Kopf: Vorbereitung wählen, neu anlegen, benennen, im Studio verwenden, löschen. */
+function prepBar() {
+  const ep = state.episode;
+  const sel = h("select", { class: "tr-input m-select", id: "m-prep", "aria-label": t("Vorbereitung") },
+    state.preps.map((p) => h("option", { value: p.id, selected: p.id === ep.id },
+      p.id === state.studio ? t("{name} (im Studio gewählt)", { name: prepName(p) }) : prepName(p))));
+  sel.addEventListener("change", () => choose(sel.value));
+  const label = h("input", { class: "tr-input", id: "m-prep-label", type: "text", value: ep.label || "", maxlength: "120", placeholder: t("Zum Beispiel Woche 46 oder Sonderfolge Wahl"), autocomplete: "off" });
+  const saveState = h("span", { class: "m-save-state", role: "status" });
+  const saveLabel = debounce(async () => {
+    try {
+      await api(`/episodes/${encodeURIComponent(ep.id)}`, { method: "PATCH", json: { label: label.value } });
+      ep.label = label.value.trim();
+      const opt = sel.querySelector(`option[value="${CSS.escape(ep.id)}"]`);
+      if (opt) opt.textContent = ep.id === state.studio ? t("{name} (im Studio gewählt)", { name: prepName(ep) }) : prepName(ep);
+      saveState.textContent = t("Gespeichert");
+      saveState.className = "m-save-state tr-status-ok";
+    } catch (e) {
+      saveState.textContent = t("Nicht gespeichert. {message}", { message: errorText(e) });
+      saveState.className = "m-save-state tr-status-error";
+    }
+  }, 700);
+  label.addEventListener("input", saveLabel);
+  const inStudio = ep.id === state.studio;
+  return h("section", { class: "m-prep-head m-screen-only", "aria-label": t("Vorbereitungen") },
+    h("div", { class: "m-prep-row" },
+      field(t("Vorbereitung"), sel, { id: "m-prep" }),
+      field(t("Arbeitstitel"), label, { id: "m-prep-label" })),
+    h("div", { class: "app-row" },
+      button(t("Neue Vorbereitung"), { icon: "plus", small: false, onclick: newPrep }),
+      inStudio
+        ? h("span", { class: "tr-small" }, t("Das Studio nimmt als Nächstes hierauf auf"))
+        : button(t("Im Studio verwenden"), { small: false, disabled: state.busy, title: state.busy ? t("Während einer Aufnahme nicht möglich") : null, onclick: useInStudio }),
+      button(t("Vorbereitung löschen"), { icon: "trash", small: false, cls: "m-danger-btn", onclick: deletePrep }),
+      saveState));
+}
+
+async function newPrep() {
+  try {
+    const made = await api("/preparations", { method: "POST", json: {} });
+    await loadPreps();
+    await choose(made.id);
+    $("#m-prep-label")?.focus();
+  } catch (e) {
+    toast(errorText(e), { error: true });
+  }
+}
+
+async function useInStudio() {
+  try {
+    await api("/studio/preparation", { method: "PUT", json: { episode_id: state.episode.id } });
+    await loadPreps();
+    render();
+    toast(t("Das Studio nimmt als Nächstes hierauf auf"));
+  } catch (e) {
+    toast(errorText(e), { error: true });
+  }
+}
+
+async function deletePrep() {
+  const ep = state.episode;
+  const ok = await confirmDialog({ title: t("Vorbereitung löschen"), text: t("„{name}“ wird samt Sendeplan, Dossiers und Notizen gelöscht", { name: prepName(ep) }), ok: t("Löschen"), danger: true });
+  if (!ok) return;
+  try {
+    await api(`/episodes/${encodeURIComponent(ep.id)}`, { method: "DELETE" });
+    await loadPreps();
+    if (!state.preps.length) {
+      await api("/preparations", { method: "POST", json: {} });
+      await loadPreps();
+    }
+    await choose((state.preps.find((p) => p.id === state.studio) || state.preps[0]).id);
+  } catch (e) {
+    toast(errorText(e), { error: true });
   }
 }
 
@@ -121,7 +222,8 @@ function render() {
     return;
   }
   const ep = state.episode;
-  const label = ep.number != null ? t("Folge {n}", { n: ep.number }) : t("nächste Folge");
+  const label = ep.label || (ep.number != null ? t("Folge {n}", { n: ep.number }) : t("nächste Folge"));
+  root.append(prepBar());
   const kindSel = h("select", { class: "tr-input m-select", id: "m-add-kind", "aria-label": t("Art des neuen Abschnitts") });
   kinds().forEach(([v, name]) => kindSel.append(h("option", { value: v }, name)));
   const bar = h("div", { class: "m-plan-bar m-screen-only" },

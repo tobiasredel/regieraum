@@ -188,22 +188,69 @@ def get_episode(db: DB, episode_id: str) -> dict | None:
     return episode_load(db.one("SELECT * FROM episodes WHERE id=?", (episode_id,)))
 
 
-def current_episode(db: DB, create: bool = False) -> dict | None:
-    marks = ",".join("?" * len(CURRENT_STATUSES))
-    row = db.one(f"SELECT * FROM episodes WHERE status IN ({marks}) ORDER BY created_at DESC LIMIT 1", CURRENT_STATUSES)
-    if row is None and create:
-        show = db.get_setting("show", {})
-        eid = util.new_id()
-        import uuid
+# --- Vorbereitungen und die Folge des Studios ----------------------------------------------------------
+# Eine Vorbereitung ist eine Folge im Zustand `draft` mit Sendeplan und Arbeitstitel (`label`); davon kann es beliebig
+# viele geben. Das Studio nimmt in die gewählte Vorbereitung auf (Einstellung `studio.episode_id`) oder, mit
+# `studio.episode_id = None`, ohne Vorbereitung in eine neue, leere Folge. Ohne Wahl gilt die neueste Vorbereitung.
 
-        db.run(
-            "INSERT INTO episodes(id,status,source,explicit,episode_type,guid,created_at,edl) VALUES(?,?,?,?,?,?,?,?)",
-            (eid, "draft", "recorded", int(bool(show.get("explicit"))), "full", str(uuid.uuid4()), util.now_ms(),
-             util.dumps(DEFAULT_EDL)),
-        )
-        with db.tx() as c:
+
+def new_draft(db: DB, *, plan: bool = True, label: str = "") -> dict:
+    """Neue Vorbereitung: Folge im Zustand `draft`, mit Standardplan oder leer."""
+    import uuid
+
+    show = db.get_setting("show", {})
+    eid = util.new_id()
+    with db.tx() as c:
+        c.execute("INSERT INTO episodes(id,status,source,explicit,episode_type,guid,created_at,edl,label) VALUES(?,?,?,?,?,?,?,?,?)",
+                  (eid, "draft", "recorded", int(bool(show.get("explicit"))), "full", str(uuid.uuid4()), util.now_ms(),
+                   util.dumps(DEFAULT_EDL), label))
+        if plan:
             seed_default_plan(c, eid)
-        row = db.one("SELECT * FROM episodes WHERE id=?", (eid,))
+    return episode_load(db.one("SELECT * FROM episodes WHERE id=?", (eid,)))
+
+
+def preparations(db: DB) -> list[dict]:
+    """Alle Vorbereitungen, neueste zuerst, mit Zahl der Abschnitte und fertigen Dossiers."""
+    return db.all(
+        "SELECT e.id, e.label, e.title, e.number, e.created_at, "
+        "(SELECT COUNT(*) FROM segments s WHERE s.episode_id=e.id) AS segments, "
+        "(SELECT COUNT(*) FROM segments s WHERE s.episode_id=e.id AND s.status='ready') AS ready "
+        "FROM episodes e WHERE e.status='draft' ORDER BY e.created_at DESC, e.rowid DESC")
+
+
+def studio_choice(db: DB) -> tuple[bool, str | None]:
+    """Wahl im Studio: (gewählt, Folge). `(True, None)` heißt ausdrücklich ohne Vorbereitung."""
+    sel = db.get_setting("studio", {}) or {}
+    if "episode_id" not in sel:
+        return False, None
+    return True, sel["episode_id"]
+
+
+def set_studio_choice(db: DB, episode_id: str | None, chosen: bool = True) -> None:
+    db.set_setting("studio", {"episode_id": episode_id} if chosen else {})
+
+
+def current_episode(db: DB, create: bool = False) -> dict | None:
+    """Die Folge des Studios: eine laufende Aufnahme oder ein laufender Upload; sonst die gewählte Vorbereitung,
+    ohne Wahl die neueste. Mit `create` entsteht bei Bedarf eine Folge (ohne Vorbereitung leer, sonst mit
+    Standardplan)."""
+    marks = ",".join("?" * len(CURRENT_STATUSES[1:]))
+    row = db.one(f"SELECT * FROM episodes WHERE status IN ({marks}) ORDER BY created_at DESC LIMIT 1", CURRENT_STATUSES[1:])
+    if row is not None:
+        return episode_load(row)
+    chosen, eid = studio_choice(db)
+    if chosen and eid is None:
+        if not create:
+            return None
+        ep = new_draft(db, plan=False)
+        set_studio_choice(db, ep["id"])
+        return ep
+    if chosen:
+        row = db.one("SELECT * FROM episodes WHERE id=? AND status='draft'", (eid,))
+    if row is None:
+        row = db.one("SELECT * FROM episodes WHERE status='draft' ORDER BY created_at DESC, rowid DESC LIMIT 1")
+    if row is None and create:
+        return new_draft(db)
     return episode_load(row)
 
 
@@ -216,49 +263,22 @@ def plan_has_content(db: DB, episode_id: str) -> bool:
                   "OR dossier IS NOT NULL OR status!='empty') LIMIT 1", (episode_id,)) is not None
 
 
-def discard_plan_target(db: DB, ep: dict) -> tuple[str, dict | None]:
-    """Wohin der Sendeplan einer verworfenen Aufnahme geht. -> (was, andere aktuelle Folge)
-    `none`: Die Aufnahme hat keinen Sendeplan mit Inhalt. `move`: Er geht in den (neuen oder leeren) Entwurf.
-    `conflict`: Es gibt schon eine aktuelle Folge mit eigenem Plan oder eine laufende Aufnahme; übernehmen geht nicht."""
-    cur = current_episode(db)
-    other = cur if cur and cur["id"] != ep["id"] else None
-    if not plan_has_content(db, ep["id"]):
-        return "none", other
-    if other is None:
-        return "move", None
-    if other["status"] != "draft" or plan_has_content(db, other["id"]):
-        return "conflict", other
-    return "move", other
-
-
-def discard_recording(db: DB, ep: dict, move_plan: bool) -> str:
-    """Aufnahme samt Spuren, Ereignissen, Jobs und Karten löschen. Mit `move_plan` wandert der Sendeplan (Abschnitte,
-    Eingaben, Notizen, Dossiers) in den aktuellen Entwurf; gibt es keinen, entsteht einer. Besuchsmarken werden
-    zurückgesetzt. Dateien löscht der Aufrufer. -> ID des Entwurfs, mit dem es weitergeht."""
-    import uuid
-
+def discard_recording(db: DB, ep: dict) -> str:
+    """Aufnahme verwerfen: Spuren, Ereignisse, Jobs, Karten und alles Abgeleitete (Schnitt, Angaben, Bericht) weg,
+    die Folge wird wieder zur Vorbereitung (`draft`) mit ihrem Sendeplan samt Dossiers und Notizen; Besuchsmarken
+    werden zurückgesetzt. Das Studio wählt sie für die nächste Aufnahme. Dateien löscht der Aufrufer. -> ID der Folge."""
     eid = ep["id"]
-    cur = current_episode(db)
-    other = cur if cur and cur["id"] != eid else None
     with db.tx() as c:
-        target = other["id"] if other else util.new_id()
-        if other is None:
-            show = db.get_setting("show", {})
-            c.execute("INSERT INTO episodes(id,status,source,explicit,episode_type,guid,created_at,edl) VALUES(?,?,?,?,?,?,?,?)",
-                      (target, "draft", "recorded", int(bool(show.get("explicit"))), "full", str(uuid.uuid4()),
-                       util.now_ms(), util.dumps(DEFAULT_EDL)))
-        if move_plan:
-            c.execute("DELETE FROM segments WHERE episode_id=?", (target,))
-            c.execute("UPDATE segments SET episode_id=?, visited_at=NULL, updated_at=? WHERE episode_id=?",
-                      (target, util.now_ms(), eid))
-        elif other is None:
-            seed_default_plan(c, target)
         c.execute("DELETE FROM clock_points WHERE track_id IN (SELECT id FROM tracks WHERE episode_id=?)", (eid,))
         c.execute("DELETE FROM chunks WHERE track_id IN (SELECT id FROM tracks WHERE episode_id=?)", (eid,))
-        for table in ("tracks", "events", "jobs", "segments", "cards"):
+        for table in ("tracks", "events", "jobs", "cards"):
             c.execute(f"DELETE FROM {table} WHERE episode_id=?", (eid,))
-        c.execute("DELETE FROM episodes WHERE id=?", (eid,))
-    return target
+        c.execute("UPDATE segments SET visited_at=NULL, updated_at=? WHERE episode_id=?", (util.now_ms(), eid))
+        c.execute("UPDATE episodes SET status='draft', rec_start_server_ms=NULL, rec_stop_server_ms=NULL, duration_ms=NULL, "
+                  "publish_at=NULL, published_at=NULL, audio_key=NULL, audio_bytes=NULL, audio_mime=NULL, edl=?, ai=NULL, "
+                  "report=NULL, title=NULL, summary=NULL, description_html=NULL WHERE id=?", (util.dumps(DEFAULT_EDL), eid))
+    set_studio_choice(db, eid)
+    return eid
 
 
 def update_episode(db: DB, episode_id: str, **fields: Any) -> None:

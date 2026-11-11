@@ -146,8 +146,8 @@ function renderBanner() {
   const job = runningJob(ep);
   const box = (cls, ...c) => slot.append(h("div", { class: `m-banner ${cls}`, role: cls.includes("error") ? "alert" : "status" }, ...c));
   if (ep.status === "draft" || ep.status === "recording") {
-    box("", h("p", null, ep.status === "recording" ? t("Die Aufnahme läuft gerade im Studio. Prüfen und Schneiden folgen danach.") : t("Diese Folge ist ein Entwurf und noch nicht aufgenommen")),
-      h("p", null, h("a", { href: "/studio" }, t("Zum Studio"))));
+    box("", h("p", null, ep.status === "recording" ? t("Die Aufnahme läuft gerade im Studio. Prüfen und Schneiden folgen danach.") : t("Diese Folge ist eine Vorbereitung und noch nicht aufgenommen")),
+      h("p", null, ep.status === "draft" ? h("a", { href: `/plan?id=${encodeURIComponent(ep.id)}` }, t("Zur Vorbereitung")) : h("a", { href: "/studio" }, t("Zum Studio"))));
   } else if (ep.status === "uploading") {
     const lines = ep.tracks.map((tk) => {
       const pct = tk.total_frames ? Math.min(100, Math.round((tk.uploaded_frames / tk.total_frames) * 100)) : null;
@@ -671,8 +671,8 @@ async function unpublish(text, ok) {
 
 // --- Verwerfen und neu aufnehmen ----------------------------------------------------------------
 function discardSection(ep) {
-  const run = async (dropPlan) => {
-    await api(`/episodes/${encodeURIComponent(id)}/discard`, { method: "POST", json: { drop_plan: dropPlan } });
+  const run = async () => {
+    await api(`/episodes/${encodeURIComponent(id)}/discard`, { method: "POST", json: {} });
     state.leaving = true;
     location.href = "/studio";
   };
@@ -685,11 +685,9 @@ function discardSection(ep) {
         if (!ok) return;
         if (state.editor) state.editor.pause();
         try {
-          await run(false);
+          await run();
         } catch (e) {
-          if (e.code !== "plan_conflict") { toast(errorText(e), { error: true }); return; }
-          if (!(await confirmDialog({ title: t("Sendeplan geht verloren"), text: e.message, ok: t("Trotzdem verwerfen"), danger: true }))) return;
-          try { await run(true); } catch (e2) { toast(errorText(e2), { error: true }); }
+          toast(errorText(e), { error: true });
         }
       } })));
 }

@@ -10,7 +10,7 @@ const [U, C, Store, Rec, Net, RTC, Snd, Media, Id, Plan] = await Promise.all([
   imp("sounds.js"), imp("media.js"), imp("identity.js"), imp("plan.js"),
 ]);
 const { h, fill, icon, dur, num1, toDb, toast, params, isMobile, api } = U;
-const { t } = await import(`../i18n.js${V}`);
+const { t, LOCALE } = await import(`../i18n.js${V}`);
 
 const app = document.getElementById("ps-app");
 const ROLE = app.dataset.role === "guest" ? "guest" : "host";
@@ -744,14 +744,38 @@ function ask(title, text, okLabel) {
 /** Aufnahme verwerfen und neu ansetzen: Spuren weg, der Sendeplan mit den Dossiers bleibt (SPEC Abschnitt 16). */
 async function discardRecording(episodeId) {
   if (!(await ask(t("Aufnahme verwerfen?"), t("Alle Spuren dieser Aufnahme werden gelöscht. Der Sendeplan mit den Dossiers bleibt und steht für die neue Aufnahme bereit."), t("Verwerfen")))) return;
-  const call = (body) => api("POST", `/api/host/episodes/${encodeURIComponent(episodeId)}/discard`, { token: S.token, body });
   try {
-    await call({});
+    await api("POST", `/api/host/episodes/${encodeURIComponent(episodeId)}/discard`, { token: S.token, body: {} });
   } catch (e) {
-    if (e.code !== "plan_conflict") { toast(e.message || t("Verwerfen fehlgeschlagen"), 6000); return; }
-    if (!(await ask(t("Sendeplan geht verloren"), e.message, t("Trotzdem verwerfen")))) return;
-    try { await call({ drop_plan: true }); } catch (e2) { toast(e2.message || t("Verwerfen fehlgeschlagen"), 6000); }
+    toast(e.message || t("Verwerfen fehlgeschlagen"), 6000);
   }
+}
+
+/** Name einer Vorbereitung: Arbeitstitel, sonst Folgennummer, sonst Datum. */
+function prepName(p) {
+  if (p.label) return p.label;
+  if (p.number != null) return t("Folge {n}", { n: p.number });
+  return t("Vorbereitung vom {date}", { date: new Date(p.created_at).toLocaleDateString(LOCALE) });
+}
+
+/** Worauf die nächste Aufnahme aufbaut: eine der Vorbereitungen oder keine. */
+function prepPicker(preps, prepId) {
+  const sel = h("select", { class: "tr-input ps-select", id: "ps-prep" },
+    preps.map((p) => h("option", { value: p.id, selected: p.id === prepId },
+      p.segments ? t("{name} · {ready} von {n} Dossiers", { name: prepName(p), ready: p.ready, n: p.segments }) : prepName(p))),
+    h("option", { value: "", selected: !prepId }, t("Ohne Vorbereitung")));
+  sel.addEventListener("change", async () => {
+    sel.disabled = true;
+    try {
+      await api("PUT", "/api/host/studio/preparation", { token: S.token, body: { episode_id: sel.value || null } });
+    } catch (e) {
+      toast(e.message || t("Die Vorbereitung ließ sich nicht wechseln"), 6000);
+      sel.value = prepId;
+    } finally {
+      sel.disabled = false;
+    }
+  });
+  return h("div", { class: "ps-prep" }, h("label", { class: "tr-label", for: "ps-prep" }, t("Aufbauen auf")), sel);
 }
 
 function setConn(text) { if (!UI.conn) return; UI.conn.textContent = text; UI.conn.hidden = !text; }
@@ -837,7 +861,9 @@ function renderBar() {
   setText(UI.statusSub, sub);
 
   if (isHost) {
-    const key = `${ep.status}|${ep.paused}|${now < (start || 0)}`;
+    const preps = (S.room && S.room.preparations) || [];
+    const prepId = (S.room && S.room.prep_id) || "";
+    const key = `${ep.status}|${ep.paused}|${now < (start || 0)}|${prepId}|${preps.map((p) => `${p.id}:${p.label}:${p.ready}/${p.segments}`).join(",")}`;
     if (key !== UI.controlsKey) {
       UI.controlsKey = key;
       const b = [];
@@ -850,6 +876,7 @@ function renderBar() {
         b.push(h("span", { class: "ps-small" }, t("Neue Aufnahme, sobald alle Spuren oben sind")));
         b.push(discardButton(ep.id));
       } else {
+        b.push(prepPicker(preps, prepId));
         b.push(h("button", { class: "tr-btn tr-btn-primary", type: "button", id: "ps-start", onclick: () => ctl({ type: "rec.start" }) }, icon("circle"), t("Aufnahme starten")));
       }
       fill(UI.controls, b);

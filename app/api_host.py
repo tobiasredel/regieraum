@@ -387,7 +387,7 @@ def episodes_list(request: Request) -> list[dict]:
 def episode_item(r: dict) -> dict:
     """Folge ohne große Felder (Liste, `POST /episodes/draft`)."""
     item = {k: r[k] for k in ("id", "status", "source", "number", "season", "title", "summary", "duration_ms",
-                              "created_at", "publish_at", "published_at", "episode_type")}
+                              "created_at", "publish_at", "published_at", "episode_type", "label")}
     item["explicit"] = bool(r["explicit"])
     return item
 
@@ -430,6 +430,7 @@ class EdlBody(BaseModel):
 
 
 class EpisodePatch(BaseModel):
+    label: str | None = Field(default=None, max_length=120)  # Arbeitstitel einer Vorbereitung
     title: str | None = Field(default=None, max_length=300)
     number: int | None = Field(default=None, ge=0)
     season: int | None = Field(default=None, ge=0)
@@ -447,6 +448,8 @@ def episode_patch(episode_id: str, body: EpisodePatch, request: Request) -> dict
     ep = _episode_or_404(request, episode_id)
     changes = body.model_dump(exclude_unset=True)
     fields: dict = {}
+    if "label" in changes and changes["label"] is not None:
+        fields["label"] = changes["label"].strip()
     for k in ("title", "number", "season", "summary", "description_html", "explicit", "episode_type"):
         if k in changes:
             if k == "episode_type" and changes[k] is None:
@@ -493,13 +496,10 @@ async def episode_delete(episode_id: str, request: Request) -> dict:
     return {"deleted": True}
 
 
-class DiscardBody(BaseModel):
-    drop_plan: bool = False
-
-
 @router.post("/episodes/{episode_id}/discard")
-async def episode_discard(episode_id: str, request: Request, body: DiscardBody | None = None) -> dict:
-    """Aufnahme verwerfen und neu ansetzen: Spuren und alles Abgeleitete weg, der Sendeplan mit den Dossiers bleibt."""
+async def episode_discard(episode_id: str, request: Request) -> dict:
+    """Aufnahme verwerfen und neu ansetzen: Spuren und alles Abgeleitete weg; die Folge wird wieder zur Vorbereitung
+    mit Sendeplan und Dossiers und ist im Studio für die nächste Aufnahme gewählt."""
     st = _st(request)
     ep = _episode_or_404(request, episode_id)
     if ep["source"] != "recorded":
@@ -508,23 +508,63 @@ async def episode_discard(episode_id: str, request: Request, body: DiscardBody |
         raise ApiError(409, "recording", "Die Aufnahme läuft noch. Erst beenden, dann verwerfen")
     if ep["status"] not in core.DISCARDABLE:
         raise ApiError(409, "bad_state", "Verwerfen geht nur nach der Aufnahme, während der Verarbeitung, in der Prüfung oder nach einem Fehler")
-    plan, other = core.discard_plan_target(st.db, ep)
-    if plan == "conflict" and not (body and body.drop_plan):
-        if other["status"] != "draft":
-            raise ApiError(409, "plan_conflict", "Gerade läuft schon eine neue Aufnahme. Der Sendeplan dieser Aufnahme lässt sich deshalb nicht übernehmen und würde mit gelöscht")
-        raise ApiError(409, "plan_conflict", "Der neue Entwurf hat schon einen eigenen Sendeplan. Der Sendeplan dieser Aufnahme lässt sich deshalb nicht übernehmen und würde mit gelöscht")
     runner = request.app.state.runner
     try:
         if not await runner.cancel_episode(episode_id):
             raise ApiError(409, "job_running", "Für diese Folge läuft gerade noch ein Arbeitsschritt. Bitte gleich noch einmal versuchen")
         await st.room.companion.discard_pending()  # der Begleiter schreibt nach dem Stopp noch sein Protokoll
-        target = core.discard_recording(st.db, ep, move_plan=(plan == "move"))
+        target = core.discard_recording(st.db, ep)
     finally:
         runner.release_cancel(episode_id)
     shutil.rmtree(st.cfg.episode_dir(episode_id), ignore_errors=True)
     await st.room.broadcast({"type": "rec.discard", "episode_id": episode_id})
     await _room_update(request)
-    return {"discarded": True, "plan": {"move": "moved", "none": "none", "conflict": "dropped"}[plan], "episode_id": target}
+    return {"discarded": True, "episode_id": target}
+
+
+# --- Vorbereitungen ---------------------------------------------------------------------------------
+class PreparationBody(BaseModel):
+    label: str = Field(default="", max_length=120)
+
+
+@router.get("/preparations")
+def preparations_list(request: Request) -> dict:
+    """Alle Vorbereitungen und die Wahl des Studios (`selected`: ID, oder None für „ohne Vorbereitung“)."""
+    st = _st(request)
+    cur = core.current_episode(st.db)
+    busy = cur is not None and cur["status"] in ("recording", "uploading")
+    chosen, eid = core.studio_choice(st.db)
+    selected = None if (chosen and eid is None) else (cur["id"] if cur and cur["status"] == "draft" else None)
+    return {"preparations": core.preparations(st.db), "selected": selected, "busy": busy}
+
+
+@router.post("/preparations", status_code=201)
+async def preparation_create(request: Request, body: PreparationBody | None = None) -> dict:
+    """Neue Vorbereitung mit dem Standardplan aus dem Sendeformat."""
+    st = _st(request)
+    ep = core.new_draft(st.db, label=(body.label.strip() if body else ""))
+    await _room_update(request)
+    return episode_item(ep)
+
+
+class StudioChoice(BaseModel):
+    episode_id: str | None = None
+
+
+@router.put("/studio/preparation")
+async def studio_preparation(body: StudioChoice, request: Request) -> dict:
+    """Worauf die nächste Aufnahme aufbaut: eine Vorbereitung oder (`episode_id: null`) keine."""
+    st = _st(request)
+    cur = core.current_episode(st.db)
+    if cur is not None and cur["status"] in ("recording", "uploading"):
+        raise ApiError(409, "busy", "Während einer Aufnahme oder eines Uploads lässt sich die Vorbereitung nicht wechseln")
+    if body.episode_id is not None:
+        ep = core.get_episode(st.db, body.episode_id)
+        if ep is None or ep["status"] != "draft":
+            raise ApiError(404, "preparation_not_found", "Vorbereitung nicht gefunden")
+    core.set_studio_choice(st.db, body.episode_id)
+    await _room_update(request)
+    return preparations_list(request)
 
 
 def _job_response(request: Request, job_id: str) -> dict:

@@ -13,7 +13,8 @@ The interface is available in German and English. "Regieraum" is the German word
 - **Preparation.** You plan an episode as a running order of segments (short topics, a main topic, a recommendation,
   free segments; the names are yours). For each segment you enter keywords, a thesis or links, and the app researches
   a dossier with sourced facts, figures, positions, counterarguments, questions and hooks. It never proposes topics
-  on its own.
+  on its own. You can keep several preparations side by side (next week, a special, a backup topic) and choose
+  in the studio which one a recording builds on, or record without one.
 - **Studio.** Host and guests meet in the browser. Every participant is recorded locally and losslessly
   (double-ender) and uploaded in the background; WebRTC is only used for the live conversation. Guests join through a
   link without an account. Video is live only and never recorded. Jingles are audible live and end up sample accurate

@@ -149,6 +149,10 @@ class Room:
                            for s in (core.plan_of(db, ep["id"]) if ep else [])]
             out["current_segment_id"] = self.current_segment_id
             out["format"] = core.get_format(db)  # Namen der Abschnittsarten für die Oberfläche
+            # Vorbereitungen zur Wahl im Studio; `prep_id` ist die, in die als Nächstes aufgenommen wird (None: ohne)
+            out["preparations"] = [{k: p[k] for k in ("id", "label", "title", "number", "created_at", "segments", "ready")}
+                                   for p in core.preparations(db)]
+            out["prep_id"] = ep["id"] if ep and ep["status"] == "draft" else None
         return out
 
     async def track_progress(self, track_id: str) -> None:
@@ -298,6 +302,7 @@ class Room:
         if ep["status"] == "uploading":
             raise ApiError(409, "uploading", "Der Upload der letzten Aufnahme läuft noch")
         start_at = util.now_ms() + START_LEAD_MS
+        core.set_studio_choice(self.db, None, chosen=False)  # nach dieser Aufnahme gilt wieder die neueste Vorbereitung
         with self.db.tx() as c:
             c.execute("INSERT INTO events(id,episode_id,kind,server_ms,payload) VALUES(?,?,?,?,?)",
                       (util.new_id(), ep["id"], "rec.start", start_at, "{}"))

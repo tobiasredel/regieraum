@@ -47,10 +47,10 @@ async function main() {
   check(await host.evaluate(() => document.querySelector(".ps-upload").hidden), "Host: Upload-Hinweis ist weg");
 
   const eps = await api("GET", "/api/host/episodes");
-  check(!eps.some((e) => e.id === episode.id), "die verworfene Folge gibt es nicht mehr");
+  check(eps.find((e) => e.id === episode.id)?.status === "draft", "die verworfene Folge ist wieder eine Vorbereitung");
   const cur = (await api("POST", "/api/host/episodes/draft")).episode;
   const plan = await api("GET", `/api/host/episodes/${cur.id}/segments`);
-  check(cur.id !== episode.id && plan[0].id === segs[0].id && plan[0].title === "Rente mit 70" && plan[0].notes === "mit Hamburg einsteigen", "der Sendeplan steht im neuen Entwurf");
+  check(cur.id === episode.id && plan[0].id === segs[0].id && plan[0].title === "Rente mit 70" && plan[0].notes === "mit Hamburg einsteigen", "die Folge ist wieder Vorbereitung mit ihrem Sendeplan");
   await host.waitForFunction(() => /Rente mit 70/.test(document.querySelector(".ps-plan").textContent), null, { timeout: 10000 });
   check(true, "Studio zeigt den übernommenen Sendeplan");
 

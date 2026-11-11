@@ -72,7 +72,9 @@
 .ps-status{font:500 var(--fs-h2)/1.2 var(--font-serif);font-variant-numeric:tabular-nums;margin:0}
 .ps-status-sub{font-size:var(--fs-small);color:var(--slate);margin-top:var(--space-1)}
 .ps-status-sub:empty{display:none}
-.ps-controls{display:flex;flex-wrap:wrap;gap:var(--space-3)}
+.ps-controls{display:flex;flex-wrap:wrap;align-items:flex-end;gap:var(--space-3)}
+.ps-prep{display:flex;flex-direction:column;gap:var(--space-1);min-width:0;flex:1 1 100%}
+.ps-prep .ps-select{width:100%}
 .ps-conn{font-size:16px}
 
 /* Hinweise: Status als Text auf weißer Karte, keine farbigen Flächen */
@@ -228,6 +230,7 @@ body.ps-live .tr-content{max-width:none;padding:0}
 body.ps-live .tr-toast{top:auto;bottom:calc(var(--space-5) + env(safe-area-inset-bottom));left:var(--space-5);transform:none}
 .ps-studio.is-host.is-live,.ps-studio.is-host.is-live.has-stage{grid-template-columns:minmax(0,1fr) minmax(300px,.8fr) minmax(0,1.1fr);grid-template-rows:auto minmax(0,1fr);gap:var(--space-4);align-items:stretch;height:100vh;height:100dvh;max-width:1920px;margin:0 auto;padding:var(--space-4) var(--space-5)}
 .ps-live-only{display:none}
+.ps-studio:not(.is-live) .ps-live-only{display:none!important}
 /* Tastenkappe: alles, was sich per Taste auslösen lässt, zeigt seine Taste (wie die Jingles im Soundboard) */
 .tr-btn .ps-kbd{background:none;border-color:currentColor;color:inherit}
 .ps-keys{display:inline-flex;align-items:center;gap:var(--space-1)}

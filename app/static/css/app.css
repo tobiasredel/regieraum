@@ -5,6 +5,9 @@
 /* Tastenkappe: alles, was sich per Taste auslösen lässt, zeigt seine Taste */
 .app-kbd, .ps-kbd { display: inline-flex; align-items: center; justify-content: center; flex: none; min-width: 20px; height: 20px; padding: 0 var(--space-1); border-radius: var(--radius-sm); background: var(--paper); border: 1px solid var(--line); color: var(--slate); font: 500 12px/1 var(--font-sans); }
 
+/* Das Attribut hidden gilt immer, auch wenn eine Klasse display setzt (unabhängig vom Thema) */
+[hidden] { display: none !important; }
+
 /* Nur für Screenreader sichtbar */
 .app-vh { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
 

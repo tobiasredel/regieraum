@@ -49,8 +49,16 @@ function row(ep) {
   return h("li", null, h("a", { class: "tr-item m-ep", href: `/episodes/${encodeURIComponent(ep.id)}` }, no, text));
 }
 
-function render(items) {
+function render(all) {
   clear(root);
+  // Vorbereitungen (Zustand draft) stehen unter „Vorbereitung“, nicht in der Liste der Folgen
+  const preps = all.filter((e) => e.status === "draft");
+  const items = all.filter((e) => e.status !== "draft");
+  if (preps.length) {
+    root.append(h("p", { class: "m-lead" }, rich(preps.length === 1 ? t("Eine Vorbereitung ist in Arbeit: {link}") : t("{n} Vorbereitungen sind in Arbeit: {link}", { n: preps.length }), {
+      link: h("a", { href: "/plan" }, t("zur Vorbereitung")),
+    })));
+  }
   if (!items.length) {
     root.append(h("div", { class: "m-empty" },
       h("p", null, t("Noch keine Folgen")),

@@ -345,57 +345,43 @@ def _fill_plan(app, eid):
     return db.one("SELECT id FROM segments WHERE episode_id=? AND sort=0", (eid,))["id"]
 
 
-def test_discard_review_moves_plan_into_empty_draft(client, app, cfg):
+def test_discard_review_turns_episode_back_into_preparation(client, app, cfg):
     from app import core
 
     db = app.state.db
     eid, out = _make_episode(app, cfg, status="review")
     (out / "episode.mp3").write_bytes(b"ID3" + b"\0" * 100)
     seg = _fill_plan(app, eid)
+    core.update_episode(db, eid, title="Vorschlag", label="Woche 46")
     db.run("INSERT INTO tracks(id,episode_id,participant_id,participant_name,sample_rate,format,start_server_ms,status,created_at) "
            "VALUES('t1',?,'p1','Max',48000,'s24le',1000,'assembled',1)", (eid,))
     db.run("INSERT INTO cards(id,episode_id,server_ms,kind,text) VALUES('c1',?,1,'fakt','x')", (eid,))
-    draft = core.current_episode(db, create=True)  # der neue Entwurf mit leerem Standardplan
-    assert draft["id"] != eid and not core.plan_has_content(db, draft["id"])
+    other = core.new_draft(db, label="Sonderfolge")  # eine zweite Vorbereitung bleibt unberührt
 
     r = client.post(f"/api/host/episodes/{eid}/discard")
-    assert r.status_code == 200 and r.json() == {"discarded": True, "plan": "moved", "episode_id": draft["id"]}
-    assert core.get_episode(db, eid) is None and not cfg.episode_dir(eid).exists()
+    assert r.status_code == 200 and r.json() == {"discarded": True, "episode_id": eid}
+    ep = core.get_episode(db, eid)
+    assert ep["status"] == "draft" and ep["label"] == "Woche 46" and ep["title"] is None and ep["rec_start_server_ms"] is None
+    assert not cfg.episode_dir(eid).exists()
     assert db.all("SELECT * FROM tracks") == [] and db.all("SELECT * FROM cards") == []
-    plan = core.plan_of(db, draft["id"])
+    plan = core.plan_of(db, eid)
     assert len(plan) == 5 and plan[0]["id"] == seg and plan[0]["title"] == "Rente" and plan[0]["dossier"] == {"lage": "Stand der Dinge"}
     assert plan[0]["notes"] == "mit Hamburg einsteigen" and plan[0]["visited_at"] is None  # Besuchsmarke zurückgesetzt
-    assert client.post(f"/api/host/episodes/{eid}/discard").status_code == 404
+    assert len(core.plan_of(db, other["id"])) == 5
+    assert core.current_episode(db)["id"] == eid  # das Studio nimmt als Nächstes wieder hier auf
+    assert client.post(f"/api/host/episodes/{eid}/discard").status_code == 409  # jetzt Vorbereitung, nichts zu verwerfen
 
 
-def test_discard_right_after_stop_creates_draft_with_plan(client, app, cfg):
+def test_discard_right_after_stop_keeps_plan(client, app, cfg):
     from app import core
 
     db = app.state.db
     eid, _ = _make_episode(app, cfg, status="uploading")
     seg = _fill_plan(app, eid)
     r = client.post(f"/api/host/episodes/{eid}/discard", json={})
-    assert r.status_code == 200 and r.json()["plan"] == "moved"
+    assert r.status_code == 200
     cur = core.current_episode(db)
-    assert cur["id"] == r.json()["episode_id"] != eid and cur["status"] == "draft"
-    assert [s["id"] for s in core.plan_of(db, cur["id"])][0] == seg
-
-
-def test_discard_needs_confirmation_when_draft_has_own_plan(client, app, cfg):
-    from app import core
-
-    db = app.state.db
-    eid, _ = _make_episode(app, cfg, status="failed")
-    _fill_plan(app, eid)
-    draft = core.current_episode(db, create=True)
-    db.run("UPDATE segments SET title='Neues Thema' WHERE episode_id=? AND sort=1", (draft["id"],))
-    r = client.post(f"/api/host/episodes/{eid}/discard")
-    assert r.status_code == 409 and r.json()["error"]["code"] == "plan_conflict"
-    assert core.get_episode(db, eid) is not None  # nichts gelöscht
-    r = client.post(f"/api/host/episodes/{eid}/discard", json={"drop_plan": True})
-    assert r.status_code == 200 and r.json()["plan"] == "dropped"
-    titles = [s["title"] for s in core.plan_of(db, draft["id"])]
-    assert "Neues Thema" in titles and "Rente" not in titles
+    assert cur["id"] == eid and cur["status"] == "draft" and core.plan_of(db, eid)[0]["id"] == seg
 
 
 def test_discard_refused_while_recording_or_published(client, app, cfg):
@@ -494,3 +480,75 @@ def test_prompts_carry_no_fixed_show_or_names():
     assert "{title}" not in text and "Hosts:" in text  # Titel und Hosts werden nur aus dem Profil eingesetzt
     block = prompts.show_block(None)
     assert block.startswith("Show: „Podcast“.") and "Kurzthema" in block and "Lesetipp" in block
+
+
+
+# --- mehrere Vorbereitungen ------------------------------------------------------------------------------
+def test_several_preparations_and_studio_choice(client, app, cfg):
+    from app import core
+
+    db = app.state.db
+    assert client.get("/api/host/preparations").json() == {"preparations": [], "selected": None, "busy": False}
+    a = client.post("/api/host/preparations", json={"label": "Woche 46"}).json()
+    b = client.post("/api/host/preparations", json={"label": "Sonderfolge Wahl"}).json()
+    assert a["status"] == "draft" and a["label"] == "Woche 46"
+    res = client.get("/api/host/preparations").json()
+    assert [p["label"] for p in res["preparations"]] == ["Sonderfolge Wahl", "Woche 46"]  # neueste zuerst
+    assert res["preparations"][0]["segments"] == 5 and res["selected"] == b["id"]  # ohne Wahl: die neueste
+
+    # Arbeitstitel ändern
+    assert client.patch(f"/api/host/episodes/{a['id']}", json={"label": "  Woche 46, Bahn  "}).status_code == 200
+    assert core.get_episode(db, a["id"])["label"] == "Woche 46, Bahn"
+
+    # das Studio baut auf Woche 46 auf
+    r = client.put("/api/host/studio/preparation", json={"episode_id": a["id"]})
+    assert r.status_code == 200 and r.json()["selected"] == a["id"]
+    assert core.current_episode(db)["id"] == a["id"]
+
+    # ohne Vorbereitung: vor der Aufnahme keine Folge, beim Start eine leere
+    r = client.put("/api/host/studio/preparation", json={"episode_id": None})
+    assert r.json()["selected"] is None and core.current_episode(db) is None
+    ep = core.current_episode(db, create=True)
+    assert ep["id"] not in (a["id"], b["id"]) and core.plan_of(db, ep["id"]) == []
+    assert core.current_episode(db)["id"] == ep["id"]
+
+    # unbekannte oder nicht mehr vorbereitete Folge
+    assert client.put("/api/host/studio/preparation", json={"episode_id": "gibtesnicht"}).status_code == 404
+    core.update_episode(db, b["id"], status="review")
+    assert client.put("/api/host/studio/preparation", json={"episode_id": b["id"]}).status_code == 404
+
+    # während einer Aufnahme kein Wechsel
+    core.update_episode(db, a["id"], status="recording")
+    r = client.put("/api/host/studio/preparation", json={"episode_id": None})
+    assert r.status_code == 409 and r.json()["error"]["code"] == "busy"
+    assert client.get("/api/host/preparations").json()["busy"] is True
+
+    # eine Vorbereitung löschen
+    core.update_episode(db, a["id"], status="draft")
+    assert client.delete(f"/api/host/episodes/{a['id']}").status_code == 200
+    assert a["id"] not in [p["id"] for p in client.get("/api/host/preparations").json()["preparations"]]
+
+
+def test_recording_uses_chosen_preparation_and_resets_choice(client, app, clock):
+    """Über das Studio: Aufnahme startet in der gewählten Vorbereitung, danach gilt wieder die neueste."""
+    from app import core
+
+    from .app_util import host_login
+
+    db = app.state.db
+    a = core.new_draft(db, label="A")
+    b = core.new_draft(db, label="B")
+    core.set_studio_choice(db, a["id"])
+    token, _ = host_login(client)
+    with client.websocket_connect(f"/ws/p?token={token}") as h:
+        welcome = h.receive_json()
+        assert welcome["room"]["prep_id"] == a["id"]
+        assert [p["label"] for p in welcome["room"]["preparations"]] == ["B", "A"]
+        h.send_json({"type": "rec.start"})
+        for _ in range(10):
+            m = h.receive_json()
+            if m.get("type") == "rec.start":
+                break
+        assert m["episode_id"] == a["id"]
+        assert core.get_episode(db, a["id"])["status"] == "recording" and core.studio_choice(db) == (False, None)
+        assert core.get_episode(db, b["id"])["status"] == "draft"
