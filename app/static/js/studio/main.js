@@ -5,9 +5,9 @@
 
 const V = new URL(import.meta.url).search;
 const imp = (m) => import(`./${m}${V}`);
-const [U, C, Store, Rec, Net, RTC, Snd, Media, Id, Plan] = await Promise.all([
+const [U, C, Store, Rec, Net, RTC, Snd, Media, Id, Plan, Probe] = await Promise.all([
   imp("util.js"), imp("clock.js"), imp("store.js"), imp("recorder.js"), imp("net.js"), imp("rtc.js"),
-  imp("sounds.js"), imp("media.js"), imp("identity.js"), imp("plan.js"),
+  imp("sounds.js"), imp("media.js"), imp("identity.js"), imp("plan.js"), imp("probe.js"),
 ]);
 const { h, fill, icon, dur, num1, toDb, toast, params, isMobile, api } = U;
 const { t, LOCALE } = await import(`../i18n.js${V}`);
@@ -98,6 +98,7 @@ function renderCheck({ name, label }) {
   const camBox = h("input", { type: "checkbox", id: "ps-cam" });
   const camPrev = h("video", { class: "ps-cam-preview", muted: true, playsinline: true, autoplay: true, hidden: true });
   camPrev.muted = true;
+  const probe = Probe.createProbe(() => S.mic);
   const toneBtn = h("button", { class: "tr-btn tr-btn-secondary", type: "button", disabled: true }, icon("speaker"), t("Testton abspielen"));
   const go = h("button", { class: "tr-btn tr-btn-primary", type: "submit", id: "ps-go" }, icon("mic"), t("Mikrofon freigeben"));
   const hint = h("p", { class: "ps-small", id: "ps-go-hint" }, t("Der Browser fragt nach dem Mikrofon. Danach erscheint der Pegel."));
@@ -106,6 +107,7 @@ function renderCheck({ name, label }) {
     h("header", { class: "ps-check-head" },
       h("h1", {}, ROLE === "host" ? t("Studio") : t("Beitreten")),
       h("p", { class: "ps-lead" }, ROLE === "host" ? t("Gerätecheck vor der Aufnahme") : (label ? t("Einladung: {label}. Kurzer Gerätecheck, dann geht es ins Studio.", { label }) : t("Kurzer Gerätecheck, dann geht es ins Studio")))),
+    S.mobile ? h("p", { class: "ps-note ps-mobile-note", id: "ps-mobile-note" }, t("Während der Aufnahme das Studio im Vordergrund lassen und den Bildschirm nicht sperren. Am besten am Ladekabel")) : null,
     err,
     h("div", { class: "ps-check-grid" },
       ROLE === "guest" ? h("div", { class: "ps-field" }, h("label", { class: "tr-label", for: "ps-name" }, t("Name")), nameIn) : null,
@@ -115,6 +117,7 @@ function renderCheck({ name, label }) {
       h("fieldset", { class: "ps-field ps-choice" }, h("legend", { class: "tr-label" }, t("Kopfhörer")),
         h("label", { for: "ps-hp-yes" }, hpYes, h("span", {}, t("Mit Kopfhörern")), h("small", {}, t("unbearbeitetes Signal, beste Qualität"))),
         h("label", { for: "ps-hp-no" }, hpNo, h("span", {}, t("Ohne Kopfhörer")), h("small", {}, t("Echounterdrückung an")))),
+      probe.el,
       h("div", { class: "ps-field" }, h("span", { class: "tr-label" }, t("Kamera")),
         h("label", { class: "ps-check-line", for: "ps-cam" }, camBox, h("span", {}, t("Kamera einschalten (nur live, wird nie aufgezeichnet)"))), camPrev),
       h("div", { class: "ps-field" }, h("span", { class: "tr-label" }, t("Ausgang")), h("div", {}, toneBtn), h("small", {}, t("Ist der Ton zu hören, passt der Ausgang")))),
@@ -225,6 +228,7 @@ function renderCheck({ name, label }) {
         await fillDevices();
         startMeter();
         toneBtn.disabled = false;
+        probe.enable();
         if (quick) { await finishEnter(); return; }
         fill(go, icon("mic"), t("Studio betreten"));
         hint.textContent = t("Pegel prüfen: Beim normalen Sprechen sollte der Balken etwa bis zur Hälfte reichen");
@@ -254,6 +258,7 @@ function renderCheck({ name, label }) {
       }
     }
     clearInterval(meterTimer);
+    probe.dispose();
     try { srcNode && srcNode.disconnect(); } catch { /* egal */ }
     await enterStudio();
   }
@@ -398,7 +403,7 @@ function onMessage(m) {
       S.jingles.stop(m);
       break;
     case "marker":
-      if (ROLE === "host") toast(t("Marker gesetzt bei {time}", { time: dur(m.at) }));
+      if (ROLE === "host") toast(m.kind === "chapter" ? t("Kapitel bei {time}", { time: dur(m.at) }) : t("Merkpunkt bei {time}", { time: dur(m.at) }));
       break;
     case "error":
       if (m.code === "unknown_type") break; // z. B. Begleiter, den der Server noch nicht kennt
@@ -575,9 +580,10 @@ function onVisibility() {
     if (isRecording()) requestWakeLock();
     if (S.wasHidden) {
       S.wasHidden = false;
+      // Handy und Tablet: bleibt stehen, bis es weggeklickt wird; die Aufnahme dort kann wirklich Lücken bekommen
       showBanner(S.mobile
-        ? t("Das Studio war im Hintergrund. Auf Handy und Tablet kann das die Aufnahme unterbrechen. Bitte im Vordergrund lassen.")
-        : t("Das Studio war im Hintergrund. Die Aufnahme läuft weiter, das Fenster bitte offen lassen."), "warn", 12000);
+        ? t("Das Studio war im Hintergrund. Auf Handy und Tablet kann das die Aufnahme unterbrechen. Das Studio im Vordergrund lassen und den Bildschirm nicht sperren")
+        : t("Das Studio war im Hintergrund. Die Aufnahme läuft weiter, das Fenster bitte offen lassen."), "warn", S.mobile ? 0 : 12000);
     }
   }
 }
@@ -587,11 +593,11 @@ function onKey(e) {
   const el = e.target;
   if (el && (el.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']") || el.isContentEditable)) return;
   if (document.querySelector("dialog[open]")) return;
-  // Sendeplan und Begleiter: Pfeile schalten den Abschnitt, I gibt einen Impuls, / springt ins Nachschlagen, M setzt einen Marker
+  // Sendeplan und Begleiter: Pfeile schalten den Abschnitt, I gibt einen Impuls, / springt ins Nachschlagen, M setzt einen Merkpunkt, K ein Kapitel
   if (S.plan && (e.key === "ArrowRight" || e.key === "ArrowLeft")) { e.preventDefault(); S.plan.step(e.key === "ArrowRight" ? 1 : -1); return; }
   if (S.plan && S.plan.supported && (e.key === "i" || e.key === "I")) { e.preventDefault(); S.plan.pulse(); return; }
   if (S.plan && S.plan.supported && e.key === "/") { e.preventDefault(); S.plan.focusLookup(); return; }
-  if ((e.key === "m" || e.key === "M") && S.room && S.room.episode && S.room.episode.status === "recording") { e.preventDefault(); ctl({ type: "marker", label: "" }); return; }
+  if (/^[mkMK]$/.test(e.key) && isRecording()) { e.preventDefault(); ctl({ type: "marker", label: "", kind: e.key.toLowerCase() === "k" ? "chapter" : "note" }); return; }
   if (!/^[1-9]$/.test(e.key)) return;
   const s = ((S.room && S.room.sounds) || []).find((x) => x.hotkey === e.key);
   if (!s) return;
@@ -614,7 +620,9 @@ function playSound(s) {
 
 // ====================================================================== Oberfläche
 const UI = {};
-const LIVE_MQ = window.matchMedia("(min-width: 1100px) and (min-height: 600px)"); // darunter bleibt die einfache Ansicht
+// Sendemodus ab Laptop-Größe (drei Spalten) und auf dem hochkant gehaltenen Tablet (zwei Spalten, Dossier darunter);
+// darunter bleibt die einfache Ansicht
+const LIVE_MQ = window.matchMedia("(min-width: 1100px) and (min-height: 600px), (min-width: 760px) and (max-width: 1099px) and (min-height: 900px)");
 
 function buildStudio() {
   const isHost = ROLE === "host";
@@ -667,12 +675,17 @@ function buildStudio() {
     UI.board = h("div", { class: "ps-board" });
     UI.running = h("ul", { class: "ps-running", "aria-label": t("Laufende Sounds") });
     UI.markerIn = h("input", { class: "tr-input", id: "ps-marker", type: "text", maxlength: 120, placeholder: t("Bezeichnung (optional)"), autocomplete: "off" });
-    UI.markerBtn = h("button", { class: "tr-btn tr-btn-secondary", type: "submit" }, icon("flag"), t("Marker setzen"));
-    const marker = h("form", { class: "ps-marker", onsubmit: (e) => { e.preventDefault(); ctl({ type: "marker", label: UI.markerIn.value.trim() }); UI.markerIn.value = ""; } },
-      h("label", { class: "tr-label", for: "ps-marker" }, t("Marker")), h("div", { class: "ps-inline" }, UI.markerIn, UI.markerBtn));
+    const mark = (kind) => { ctl({ type: "marker", label: UI.markerIn.value.trim(), kind }); UI.markerIn.value = ""; };
+    const marker = h("form", { class: "ps-marker", onsubmit: (e) => { e.preventDefault(); mark("note"); } },
+      h("label", { class: "tr-label", for: "ps-marker" }, t("Bezeichnung")), UI.markerIn,
+      h("div", { class: "ps-inline" },
+        h("button", { class: "tr-btn tr-btn-secondary", type: "submit", id: "ps-mark-note" }, icon("bookmark"), t("Merkpunkt setzen")),
+        h("button", { class: "tr-btn tr-btn-secondary", type: "button", id: "ps-mark-chapter", onclick: () => mark("chapter") }, icon("flag"), t("Kapitel setzen"))),
+      h("p", { class: "ps-small" }, t("Merkpunkte sind nur für den Schnitt. Kapitel erscheinen in der fertigen Folge")));
     const board = UI.boardSec = h("section", { class: "ps-sounds", "aria-label": t("Soundboard") },
       h("div", { class: "ps-col-head" }, h("h2", { class: "ps-col-title" }, t("Soundboard")), h("span", { class: "ps-small ps-keys" }, kbd("1"), t("bis"), kbd("9"))),
-      UI.board, UI.running, marker, h("p", { class: "ps-small ps-live-only ps-hint-keys" }, t("Marker setzen"), kbd("M")));
+      UI.board, UI.running, marker,
+      h("p", { class: "ps-small ps-live-only ps-hint-keys" }, kbd("M"), t("Merkpunkt setzen"), kbd("K"), t("Kapitel setzen")));
     // Sendemodus (nur während der Aufnahme): Pegel und Zustand in einer Zeile, alles Übrige hinter „Technik“
     UI.liveMeters = h("div", { class: "ps-live-meters" });
     UI.liveState = h("p", { class: "ps-live-state", role: "status" });

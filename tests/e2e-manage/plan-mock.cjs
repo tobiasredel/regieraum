@@ -28,7 +28,7 @@ const DOSSIER_GOOD = {
 function initialSegments() {
   const mk = (i, kind, title, input, extra = {}) => ({ id: `seg${i}`, episode_id: "demodraft", sort: i, kind, title, input, good_type: null, status: "empty", dossier: null, notes: "", visited_at: null, updated_at: 0, ...extra });
   return [
-    mk(0, "blitzlicht", "Bahn und neue Begriffe", "Verspätung, Verzögerung im Betriebsablauf, Pressemitteilung\nhttps://example.org/presse/begriffe", { status: "ready", dossier: DOSSIER_BLITZ, notes: "Pointe am Ende: Wellness." }),
+    mk(0, "blitzlicht", "Bahn und neue Begriffe", "Verspätung, Verzögerung im Betriebsablauf, Pressemitteilung\nhttps://example.org/presse/begriffe", { status: "ready", dossier: DOSSIER_BLITZ, notes: "Pointe am Ende: Wellness.", cost_usd: 0.4149 }),
     mk(1, "blitzlicht", "", ""),
     mk(2, "blitzlicht", "Wochenrückblick", "drei Sätze, keine Hoffnung"),
     mk(3, "hauptthema", "Zuständigkeit", "These: Zuständigkeit ist ein Zustand, den man nicht erreicht, nur beschreibt. Formulare, Ämter, Bahn."),
@@ -73,7 +73,7 @@ async function mockPlan(page, { missing = false } = {}) {
         for (const s of segs) if (s.status === "researching") {
           const c = (researching.get(s.id) || 0) + 1;
           researching.set(s.id, c);
-          if (c >= 2) { s.status = "ready"; s.dossier = s.kind === "good" ? DOSSIER_GOOD : DOSSIER_BLITZ; }
+          if (c >= 2) { s.status = "ready"; s.dossier = s.kind === "good" ? DOSSIER_GOOD : DOSSIER_BLITZ; s.cost_usd = Math.round(((s.cost_usd || 0) + 0.27) * 10000) / 10000; }
         }
         return json(route, segs);
       }

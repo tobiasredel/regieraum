@@ -181,7 +181,8 @@ def test_manifest_times_from_server_times(client, app, clock, cfg):
         h.send_json({"type": "rec.pause"}); recv_until(h, "rec.pause")
         clock.advance(6000)
         h.send_json({"type": "rec.resume"}); recv_until(h, "rec.resume")
-        h.send_json({"type": "marker", "label": "Wendepunkt"}); recv_until(h, "marker")
+        h.send_json({"type": "marker", "label": "Wendepunkt", "kind": "chapter"}); recv_until(h, "marker")
+        h.send_json({"type": "marker", "label": "Versprecher"}); recv_until(h, "marker")  # ohne Angabe: Merkpunkt
         clock.advance(1000)
         h.send_json({"type": "sound.play", "sound_id": sting["id"]}); recv_until(h, "sound.play")
         clock.advance(500)
@@ -200,6 +201,7 @@ def test_manifest_times_from_server_times(client, app, clock, cfg):
     assert s2["at_ms"] == e2["at"] - start and s2["stop_ms"] == stop_msg["at"] - start and s2["fade_ms"] == 250
     assert s2["chapter_title"] == "Politik" and s3["chapter_title"] is None
     assert m["markers"] == [{"at_ms": 1000 + 10000 + 2000 + 6000, "label": "Wendepunkt"}]
+    assert [n["label"] for n in m["notes"]] == ["Versprecher"]  # Merkpunkte kommen nie in die Kapitel
     pause_from = 1000 + 10000 + 2000
     assert m["edl"] == {"trim_start_ms": 0, "trim_end_ms": None, "cuts": [{"from_ms": pause_from, "to_ms": pause_from + 6000}]}
     (t,) = m["tracks"]
@@ -327,3 +329,29 @@ def test_host_disconnect_keeps_recording_running(client, app, clock):
     with _connect(client, htoken) as h2:
         w = h2.receive_json()
         assert w["room"]["episode"]["status"] == "recording" and w["room"]["peers"][0]["track"]["status"] == "recording"
+
+
+def test_marker_kinds(client, app, clock):
+    """Merkpunkt (note) ist der Standard, Kapitel (chapter) nur auf Wunsch; Unbekanntes wird zum Merkpunkt."""
+    db = app.state.db
+    htoken, _ = host_login(client)
+    with _connect(client, htoken) as h:
+        h.receive_json()
+        create_track(client, htoken, clock.now() - 1000)
+        h.send_json({"type": "rec.start"})
+        recv_until(h, "rec.start")
+        clock.advance(1500)
+        sent = [{"type": "marker", "label": "Versprecher"},
+                {"type": "marker", "label": "Thema 2", "kind": "chapter"},
+                {"type": "marker", "kind": "note"},
+                {"type": "marker", "label": "kaputt", "kind": "irgendwas"},
+                {"type": "marker", "kind": "chapter"}]
+        got = []
+        for msg in sent:
+            clock.advance(1000)
+            h.send_json(msg)
+            got.append(recv_until(h, "marker"))
+        assert [m["kind"] for m in got] == ["note", "chapter", "note", "note", "chapter"]
+        assert [m["label"] for m in got] == ["Versprecher", "Thema 2", "Merkpunkt", "kaputt", "Marker"]
+        rows = db.all("SELECT payload FROM events WHERE kind = 'marker' ORDER BY server_ms")
+        assert [json.loads(r["payload"])["kind"] for r in rows] == ["note", "chapter", "note", "note", "chapter"]

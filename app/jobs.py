@@ -7,7 +7,7 @@ import logging
 import sys
 from pathlib import Path
 
-from . import core, i18n, manifest, ntfy, publishing, util
+from . import archive, core, i18n, manifest, ntfy, publishing, util
 
 log = logging.getLogger("podcast.jobs")
 ROOT = Path(__file__).resolve().parent.parent
@@ -134,10 +134,12 @@ class Runner:
                 pass
 
     async def tick(self) -> None:
-        """Zeitgeber: Upload-Automatik und geplante Veröffentlichungen."""
+        """Zeitgeber: Upload-Automatik, geplante Veröffentlichungen und Rohdaten ins Archiv."""
         check_uploading(self.db)
         for ep in self.db.all("SELECT id FROM episodes WHERE status='scheduled' AND publish_at<=?", (util.now_ms(),)):
             enqueue(self.db, ep["id"], "publish")
+        for ep in archive.due_episodes(self.db, self.cfg):
+            enqueue(self.db, ep["id"], "archive")
 
     # Ausführung
     async def run_one(self) -> bool:
@@ -152,7 +154,7 @@ class Runner:
                 raise JobError(f"Unbekannte Aufgabe: {job['kind']}")
             message = await handler(job)
             self._finish(job["id"], "done", message or "Fertig", 1.0)
-        except (JobError, publishing.PublishError) as exc:
+        except (JobError, publishing.PublishError, archive.ArchiveError) as exc:
             if job["episode_id"] in self._cancelled:
                 self._finish(job["id"], "failed", "Abgebrochen, die Aufnahme wurde verworfen")
             else:
@@ -233,6 +235,9 @@ class Runner:
         ep = core.get_episode(self.db, ep_id)
         if ep and job["kind"] in ("process", "remix") and ep["status"] == "processing":
             core.update_episode(self.db, ep_id, status="failed")
+        if job["kind"] == "archive" and ep:
+            await self._notify("Archivierung fehlgeschlagen", f"{self._label(ep)}: {i18n.tr(self.lang, message)}", "high",
+                               "warning", ep_id)
         if job["kind"] in ("process", "remix", "publish") and ep:
             await self._notify("Verarbeitung fehlgeschlagen", f"{self._label(ep)}: {i18n.tr(self.lang, message)}", "high",
                                "warning", ep_id)
@@ -381,6 +386,16 @@ class Runner:
         ep = self._episode(job)
         await asyncio.to_thread(publishing.unpublish_episode, self.db, self.cfg, ep["id"])
         return "Aus dem Feed genommen"
+
+    async def h_archive(self, job: dict) -> str:
+        ep = self._episode(job)
+        freed = await asyncio.to_thread(archive.archive_episode, self.db, self.cfg, ep["id"])
+        return "Rohdaten ins Archiv verschoben" if freed else "Nichts zu archivieren"
+
+    async def h_restore(self, job: dict) -> str:
+        ep = self._episode(job)
+        await asyncio.to_thread(archive.restore_episode, self.db, self.cfg, ep["id"])
+        return "Rohdaten zurückgeholt"
 
     async def h_import(self, job: dict) -> str:
         url = (util.loads(job["payload"], {}) or {}).get("feed_url")

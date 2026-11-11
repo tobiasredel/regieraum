@@ -36,6 +36,10 @@
 .ps-choice label small{grid-column:2}
 .ps-choice input,.ps-check-line input,.ps-switch input{width:18px;height:18px;margin:0;accent-color:var(--ink)} /* TODO(design): Auswahlfelder nicht im System, ink als Textrolle */
 .ps-check-line{display:flex;gap:var(--space-2);align-items:center;font-size:16px;cursor:pointer}
+.ps-mobile-note{margin:0 0 var(--space-4);padding:var(--space-3) var(--space-4);background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);font-size:var(--fs-small);color:var(--ink)}
+.ps-probe[hidden]{display:none}
+.ps-probe-row{align-items:center;gap:var(--space-2) var(--space-3)}
+.ps-probe-status{flex:1 1 140px;min-width:0;margin:0;color:var(--slate);font-variant-numeric:tabular-nums}
 .ps-check-actions{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-3) var(--space-4);margin-top:var(--space-5)}
 .ps-check-actions .ps-small{flex:1 1 220px}
 .ps-cam-preview{width:100%;max-width:320px;aspect-ratio:16/9;object-fit:cover;transform:scaleX(-1);border-radius:var(--radius-md);background:var(--paper);border:1px solid var(--line)}
@@ -337,4 +341,18 @@ button.ps-point-text:focus-visible{outline:none;box-shadow:var(--focus)}
   .ps-card.is-big .ps-card-text{font-size:28px}
   .ps-card.is-old .ps-card-text{font-size:18px}
   .ps-steps-host .ps-segment-title{font-size:16px}
+}
+
+/* Sendemodus auf dem Tablet hochkant (760 bis 1099 px Breite, ab 900 px Höhe): Kopfzeile, darunter Gespräch und
+   Karten nebeneinander, darunter über die volle Breite das Dossier */
+@media (min-width:760px) and (max-width:1099px){
+  .ps-studio.is-host.is-live,.ps-studio.is-host.is-live.has-stage{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto minmax(0,5fr) minmax(0,3fr);gap:var(--space-3);padding:var(--space-3) var(--space-4)}
+  .is-live>.ps-bar{flex-wrap:wrap;gap:var(--space-2) var(--space-3);padding:var(--space-2) var(--space-3)}
+  .is-live .ps-status{font-size:20px}
+  .is-live .ps-steps-host{order:3;flex:1 0 100%}
+  .is-live .ps-steps-host .ps-segment{min-height:44px}
+  .is-live .ps-main{grid-column:1;grid-row:2}
+  .ps-live-cards{grid-column:2;grid-row:2}
+  .ps-studio.is-live .ps-plan{grid-column:1/-1;grid-row:3;padding:var(--space-3) var(--space-4)}
+  .ps-card.is-big .ps-card-text{font-size:20px}
 }

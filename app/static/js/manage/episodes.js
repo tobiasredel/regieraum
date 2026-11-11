@@ -1,5 +1,5 @@
 // Folgenliste: Nummer, Titel, Status als Text, Dauer, Datum; laufende Verarbeitung mit Fortschritt (Polling).
-import { $, api, clear, fmtDate, fmtDateTime, fmtDuration, h, errorText, poll, progressBar, rich, statusClass, statusText, t } from "./common.js";
+import { $, api, clear, fmtDate, fmtDateTime, fmtDuration, fmtInt, h, errorText, poll, progressBar, rich, statusClass, statusText, t } from "./common.js";
 
 const root = $("#app");
 function jobLabel(kind) {
@@ -14,6 +14,14 @@ function jobLabel(kind) {
   }
 }
 let stop = null;
+let downloads = { mode: "off", totals: {} }; // Zählung der Abrufe (SPEC Abschnitt 15)
+
+function downloadsText(ep) {
+  if (ep.status !== "published") return null;
+  const n = downloads.totals[ep.id] || 0;
+  if (!n && downloads.mode === "off") return null;
+  return n === 1 ? t("{n} Download", { n: fmtInt(n) }) : t("{n} Downloads", { n: fmtInt(n) });
+}
 
 function dateText(ep) {
   if (ep.status === "published" && ep.published_at) return t("veröffentlicht {date}", { date: fmtDate(ep.published_at) });
@@ -26,6 +34,7 @@ function row(ep) {
     h("span", { class: statusClass(ep.status) }, statusText(ep.status)),
     ep.duration_ms ? h("span", { class: "m-num" }, fmtDuration(ep.duration_ms)) : null,
     h("span", { class: "m-num" }, dateText(ep)),
+    downloadsText(ep) ? h("span", { class: "m-num" }, downloadsText(ep)) : null,
   ].filter(Boolean);
   const meta = h("p", { class: "m-meta" });
   parts.forEach((p, i) => {
@@ -74,7 +83,8 @@ function render(all) {
 }
 
 async function load() {
-  const items = await api("/episodes");
+  const [items, stats] = await Promise.all([api("/episodes"), api("/stats/downloads").catch(() => null)]);
+  if (stats) downloads = stats;
   render(items);
   return items.some((e) => e.job || e.status === "processing" || e.status === "uploading" || e.status === "recording");
 }

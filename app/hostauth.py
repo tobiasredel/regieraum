@@ -108,7 +108,7 @@ class HostAuth:
 def is_public(path: str) -> bool:
     return (
         path in ("/healthz", "/login", "/logout", "/ws/p", "/api/join")
-        or path.startswith(("/join/", "/api/join/", "/api/p/", "/static/", "/public/"))
+        or path.startswith(("/join/", "/api/join/", "/api/p/", "/static/", "/public/", "/d/"))
     )
 
 

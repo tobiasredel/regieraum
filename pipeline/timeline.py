@@ -144,8 +144,8 @@ def sound_end_ms(s: dict) -> float | None:
 def chapters(manifest: dict) -> list[dict]:
     """Kapitel in Folgenzeit: [{startTime (Sekunden), title, event_id}], aufsteigend.
 
-    Quellen: Sounds der Art intro, outro, segment (Titel aus `chapter_title`, sonst Vorgabe je Art) und Marker
-    (Titel `label`). Kapitel in herausgeschnittenen Bereichen rücken an die Schnittkante, solche hinter dem Ende
+    Quellen: Sounds der Art intro, outro, segment (Titel aus `chapter_title`, sonst Vorgabe je Art) und Kapitel-Marker
+    (Titel `label`; Merkpunkte zählen nicht). Kapitel in herausgeschnittenen Bereichen rücken an die Schnittkante, solche hinter dem Ende
     entfallen; bei gleicher Startzeit bleibt das zuerst geklickte.
     """
     edl = manifest.get("edl") or {}
@@ -159,6 +159,8 @@ def chapters(manifest: dict) -> list[dict]:
         title = s.get("chapter_title") or CHAPTER_DEFAULTS.get(s.get("kind")) or s.get("label") or "Kapitel"
         items.append((_num(s.get("at_ms"), 0.0), str(title), s.get("event_id")))
     for m in manifest.get("markers") or []:
+        if m.get("kind") == "note":  # Merkpunkte sind keine Kapitel (der Server liefert sie getrennt unter `notes`)
+            continue
         items.append((_num(m.get("at_ms"), 0.0), str(m.get("label") or "Marker"), m.get("event_id")))
     items.sort(key=lambda x: x[0])
     dur = episode_duration_ms(edl, total) if total is not None else None

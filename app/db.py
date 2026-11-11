@@ -66,6 +66,21 @@ MIGRATIONS: list[str] = [
     """
     ALTER TABLE episodes ADD COLUMN label TEXT NOT NULL DEFAULT '';
     """,
+    # Version 4: Kosten der KI-Vorgänge, Rohdaten im Archiv
+    """
+    CREATE TABLE costs(
+      id TEXT PRIMARY KEY, episode_id TEXT, segment_id TEXT, kind TEXT NOT NULL, usd REAL NOT NULL, created_at INTEGER NOT NULL);
+    CREATE INDEX costs_episode ON costs(episode_id);
+    CREATE INDEX costs_created ON costs(created_at);
+    ALTER TABLE episodes ADD COLUMN archived_at INTEGER;
+    ALTER TABLE episodes ADD COLUMN archive_path TEXT;
+    """,
+    # Version 5: Downloads je Tag (datensparsam: kein Klartext-Besucher, nur ein Tages-Hash)
+    """
+    CREATE TABLE downloads(
+      day TEXT NOT NULL, episode_id TEXT NOT NULL, visitor TEXT NOT NULL, PRIMARY KEY(day, episode_id, visitor));
+    CREATE INDEX downloads_episode ON downloads(episode_id, day);
+    """,
 ]
 
 DEFAULT_PLAN: list[tuple[str, str | None]] = [

@@ -9,9 +9,10 @@
 //   PATCH  /api/host/segments/{id}                    {title?, input?, good_type?, notes?}
 //   DELETE /api/host/segments/{id}
 //   POST   /api/host/segments/{id}/research
+//   POST   /api/host/segments/{id}/transfer           {target_episode_id, mode: "move" | "copy"}  in eine andere Vorbereitung
 //   POST   /api/host/episodes/{id}/segments/order     {ids}
 import {
-  $, $$, api, button, clear, confirmDialog, debounce, errorText, field, fmtDate, fmtDateTime, h, icon, poll, rich, safeUrl, t, toast,
+  $, $$, api, button, clear, confirmDialog, debounce, errorText, field, fmtDate, fmtDateTime, fmtUsd, h, icon, poll, rich, safeUrl, t, toast,
 } from "./common.js";
 
 const root = $("#app");
@@ -194,7 +195,7 @@ function schedulePoll() {
     for (const s of state.segments) {
       const o = prev.get(s.id);
       // Eingaben des Hosts nie überschreiben: nur Status und Dossier übernehmen
-      o.status = s.status; o.dossier = s.dossier; o.updated_at = s.updated_at;
+      o.status = s.status; o.dossier = s.dossier; o.updated_at = s.updated_at; o.cost_usd = s.cost_usd;
       refreshCard(o);
     }
     state.segments = state.segments.map((s) => prev.get(s.id));
@@ -300,6 +301,7 @@ function card(seg, index) {
     h("div", { class: "m-seg-head" },
       h("div", { class: "m-seg-headtext" }, (heading.id = `${p}-h`, heading), refs.status),
       h("div", { class: "m-sound-actions m-screen-only" },
+        state.preps.length > 1 ? button(t("In andere Vorbereitung"), { icon: "external", ariaLabel: t("{label} in andere Vorbereitung", { label: labelOf(seg, index) }), onclick: () => transferSegment(seg) }) : null,
         button("", { icon: "up", ariaLabel: t("{label} nach oben", { label: labelOf(seg, index) }), title: t("Nach oben"), disabled: index === 0, onclick: () => move(index, -1) }),
         button("", { icon: "down", ariaLabel: t("{label} nach unten", { label: labelOf(seg, index) }), title: t("Nach unten"), disabled: index === state.segments.length - 1, onclick: () => move(index, 1) }),
         button("", { icon: "trash", ariaLabel: t("{label} löschen", { label: labelOf(seg, index) }), title: t("Löschen"), onclick: () => removeSegment(seg) }))),
@@ -328,6 +330,7 @@ function refreshCard(seg) {
   refs.status.append(h("span", { class: cls }, text));
   if (seg.status === "ready" && seg.dossier?.stand) refs.status.append(h("span", { class: "m-sep", "aria-hidden": "true" }, "·"), h("span", { class: "m-num tr-small" }, t("Stand {date}", { date: fmtDateTime(Date.parse(seg.dossier.stand)) })));
   if (seg.status === "failed") refs.status.append(h("span", { class: "tr-small" }, " " + t("Erneut versuchen")));
+  if (seg.cost_usd > 0) refs.status.append(h("span", { class: "m-sep", "aria-hidden": "true" }, "·"), h("span", { class: "m-num tr-small", title: t("Bisherige Kosten der Recherche") }, fmtUsd(seg.cost_usd)));
   refs.research.disabled = seg.status === "researching";
   refs.research.replaceChildren(icon("search"), document.createTextNode(seg.status === "researching" ? t("Recherche läuft") : seg.status === "ready" ? t("Neu recherchieren") : t("Recherchieren")));
   clear(refs.dossier);
@@ -488,6 +491,47 @@ async function removeSegment(seg) {
     await loadSegments();
     render();
     schedulePoll();
+  } catch (e) {
+    toast(errorText(e), { error: true });
+  }
+}
+
+/** Abschnitt in eine andere Vorbereitung verschieben oder kopieren (Dialog: Ziel wählen, dann Verschieben oder Kopieren). */
+function transferDialog(seg) {
+  return new Promise((resolve) => {
+    const others = state.preps.filter((p) => p.id !== state.episode.id);
+    const sel = h("select", { class: "tr-input m-select", id: "m-transfer-target" },
+      others.map((p) => h("option", { value: p.id }, prepName(p))));
+    const dlg = h("dialog", { class: "tr-modal m-dialog", "aria-labelledby": "m-dlg-title" });
+    const done = (v) => { dlg.close(); dlg.remove(); resolve(v); };
+    dlg.append(
+      h("h2", { id: "m-dlg-title", class: "m-dialog-title" }, t("In andere Vorbereitung")),
+      h("p", { class: "m-dialog-text" }, t("„{name}“ samt Eingabe, Notizen und Dossier", { name: seg.title || labelOf(seg) })),
+      field(t("Ziel"), sel, { id: "m-transfer-target" }),
+      h("div", { class: "app-row m-dialog-actions" },
+        button(t("Verschieben"), { variant: "primary", small: false, onclick: () => done({ target: sel.value, mode: "move" }) }),
+        button(t("Kopieren"), { variant: "secondary", small: false, onclick: () => done({ target: sel.value, mode: "copy" }) }),
+        button(t("Abbrechen"), { variant: "secondary", small: false, onclick: () => done(null) })));
+    dlg.addEventListener("cancel", (e) => { e.preventDefault(); done(null); });
+    document.body.append(dlg);
+    dlg.showModal();
+  });
+}
+
+async function transferSegment(seg) {
+  const choice = await transferDialog(seg);
+  if (!choice) return;
+  const refs = state.cards.get(seg.id);
+  try {
+    if (refs) await refs.flush.flush();
+    await api(`/segments/${encodeURIComponent(seg.id)}/transfer`, { method: "POST", json: { target_episode_id: choice.target, mode: choice.mode } });
+    const name = prepName(state.preps.find((p) => p.id === choice.target));
+    await loadPreps();
+    state.episode = state.preps.find((p) => p.id === state.episode.id) || state.episode;
+    await loadSegments();
+    render();
+    schedulePoll();
+    toast(choice.mode === "move" ? t("Abschnitt nach „{name}“ verschoben", { name }) : t("Abschnitt nach „{name}“ kopiert", { name }));
   } catch (e) {
     toast(errorText(e), { error: true });
   }

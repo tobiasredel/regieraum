@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#F5F7FA">
 <meta name="robots" content="noindex,nofollow">
+{% if app_shell %}
+<link rel="manifest" href="/app.webmanifest" crossorigin="use-credentials">
+<link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png?v={{ v }}">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="{{ show_title }}">
+{% endif %}
 <title>{% block title %}Podcast-Studio{% endblock %} · {{ show_title }}</title>
 <link rel="stylesheet" href="/static/design/tokens-unprefixed.css?v={{ v }}">
 <link rel="stylesheet" href="/static/design/components.css?v={{ v }}">

@@ -485,6 +485,9 @@ class FakeLive:
     async def close(self):
         self.closed += 1
 
+    def summary_stats(self):
+        return {"stt_cost_usd": 0.3, "llm_cost_usd": 0.12}
+
     def status(self):
         return {"on": True, "stt": "ok", "ai": "ok", "lag_ms": 1200, "message": ""}
 
@@ -581,6 +584,10 @@ def test_live_lifecycle_chunks_pause_stop_and_cards(kclient, kapp, live, clock):
         while fl.closed < 1 and time.time() < end:
             time.sleep(0.02)
         assert fl.ended >= 2 and fl.closed == 1  # sofort beim Stopp und nach der Nachlaufzeit
+        end = time.time() + 5
+        while not kapp.state.db.all("SELECT * FROM costs") and time.time() < end:
+            time.sleep(0.02)
+        assert [(r["kind"], r["episode_id"], r["usd"]) for r in kapp.state.db.all("SELECT * FROM costs")] == [("companion", eid, 0.42)]
 
         # Reconnect des Hosts: Status und nicht weggeklickte Karten im welcome
     with _ws(client, htoken) as h2:

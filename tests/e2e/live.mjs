@@ -99,13 +99,22 @@ async function main() {
   await host.keyboard.press("Escape");
   await host.evaluate(() => document.activeElement && document.activeElement.blur());
   await host.keyboard.press("m");
+  await host.waitForFunction(() => /Merkpunkt bei/.test((document.querySelector(".tr-toast") || {}).textContent || ""));
+  const toastNote = await host.textContent(".tr-toast");
+  await host.keyboard.press("k");
+  await host.waitForFunction(() => /^Kapitel bei/.test((document.querySelector(".tr-toast") || {}).textContent || ""));
+  const toastChapter = await host.textContent(".tr-toast");
   await sleep(400);
   const sent = mock.state.sent.map((m) => m.type);
   check(sent.includes("assist.segment") && mock.state.sent.find((m) => m.type === "assist.segment").segment_id === "seg3", "Pfeil nach rechts schaltet auf den nächsten Abschnitt");
   check(sent.includes("assist.pulse") && focused === "ps-lookup", "I gibt einen Impuls, / springt ins Nachschlagen");
   const ev = (await api("GET", "/api/host/episodes")).find((e) => e.status === "recording");
-  const marks = (await api("GET", `/api/host/episodes/${ev.id}`)).events.filter((e) => e.kind === "marker").length;
-  check(marks === 1, "M setzt einen Marker");
+  const marks = (await api("GET", `/api/host/episodes/${ev.id}`)).events.filter((e) => e.kind === "marker");
+  const kinds = marks.map((e) => (e.payload || {}).kind);
+  check(marks.length === 2 && kinds[0] === "note" && kinds[1] === "chapter", `M setzt einen Merkpunkt, K ein Kapitel (${kinds.join(", ")})`);
+  check(/^Merkpunkt bei \d+:\d\d$/.test(toastNote.trim()) && /^Kapitel bei \d+:\d\d$/.test(toastChapter.trim()), `Rückmeldung nennt Art und Zeit: „${toastNote.trim()}“, „${toastChapter.trim()}“`);
+  const keysHint = await host.evaluate(() => [...document.querySelectorAll(".ps-hint-keys")].map((x) => x.textContent.replace(/\s+/g, " ")).join("|"));
+  check(/M\s*Merkpunkt/.test(keysHint) && /K\s*Kapitel/.test(keysHint), `Sendemodus zeigt die Tasten: „${keysHint}“`);
   await host.keyboard.press("ArrowLeft");
   await sleep(300);
 
@@ -139,6 +148,38 @@ async function main() {
   g = await geo(host);
   check(g.live && g.scrollY <= 0 && g.scrollX <= 0 && g.plan.b <= g.vh, `1920×1080: Sendemodus ohne Scrollen (Gespräch ${g.main.w}, Karten ${g.cards.w}, Dossier ${g.plan.w})`);
   await host.screenshot({ path: path.join(SHOTS, "live-1920.png") });
+
+  // Tablet hochkant: Kopfzeile, zwei Spalten (Gespräch, Karten), darunter das Dossier über die volle Breite
+  for (const [w, hh] of [[820, 1180], [768, 1024], [1024, 1366]]) {
+    await host.setViewportSize({ width: w, height: hh });
+    await sleep(500);
+    g = await geo(host);
+    check(g.live && !g.sidebar.shown && g.scrollY <= 0 && g.scrollX <= 0, `${w}×${hh}: Sendemodus, Seite scrollt nicht (hoch ${g.scrollY}, quer ${g.scrollX})`);
+    check(g.bar.y < g.main.y && g.bar.r <= g.vw && g.bar.w > g.vw - 48, `${w}×${hh}: Kopfzeile über die ganze Breite, ohne Überlauf`);
+    check(g.main.r <= g.cards.x + 1 && Math.abs(g.main.y - g.cards.y) <= 2 && g.cards.r <= g.vw, `${w}×${hh}: Gespräch ${g.main.w} und Karten ${g.cards.w} nebeneinander`);
+    check(g.plan.y >= Math.max(g.main.b, g.cards.b) - 2 && g.plan.w > g.vw - 48 && g.plan.b <= g.vh, `${w}×${hh}: Dossier darunter über die volle Breite (${g.plan.w}×${g.plan.h}), endet im Bildschirm`);
+    check(g.board.b <= g.vh && g.main.b <= g.plan.y + 2, `${w}×${hh}: Soundboard endet über dem Dossier`);
+    const over = await host.evaluate(() => [...document.querySelectorAll(".ps-studio.is-live *")].filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && (r.right > window.innerWidth + 1 || r.left < -1); }).map((el) => el.className || el.tagName).slice(0, 5));
+    check(!over.length, `${w}×${hh}: nichts ragt seitlich heraus${over.length ? " → " + over.join(", ") : ""}`);
+    if (w === 820) await host.screenshot({ path: path.join(SHOTS, "live-820x1180.png") });
+    if (w === 768) await host.screenshot({ path: path.join(SHOTS, "live-768x1024.png") });
+  }
+  // Querformat-Tablet ohne genug Höhe bleibt in der einfachen Ansicht
+  await host.setViewportSize({ width: 900, height: 700 });
+  await sleep(400);
+  g = await geo(host);
+  check(!g.live && g.scrollX <= 0, "900×700: einfache Ansicht, kein Sendemodus, kein Querscrollen");
+  // Sweep Tablet: 760 bis 1099 px bei 1000 px Höhe, nie Überlauf
+  const bad2 = [];
+  for (let w = 1099; w >= 760; w -= 7) {
+    await host.setViewportSize({ width: w, height: 1000 });
+    await host.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    const r = await host.evaluate(() => ({ live: document.body.classList.contains("ps-live"), x: document.documentElement.scrollWidth - window.innerWidth, y: document.documentElement.scrollHeight - window.innerHeight }));
+    if (r.x > 0 || r.y > 0 || !r.live) bad2.push(`${w}px quer ${r.x} hoch ${r.y} live ${r.live}`);
+  }
+  check(!bad2.length, `Sweep 1099–760 px bei 1000 px Höhe: Sendemodus, nie Überlauf${bad2.length ? " → " + bad2.slice(0, 5).join("; ") : ""}`);
+  await host.setViewportSize({ width: 1920, height: 1080 });
+  await sleep(400);
 
   // Breiten-Sweep im Sendemodus und darunter: nie quer scrollen, über 1100 px nie hoch
   const bad = [];

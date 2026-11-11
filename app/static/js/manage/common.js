@@ -128,6 +128,8 @@ const TF = new Intl.DateTimeFormat(LOCALE, { hour: "2-digit", minute: "2-digit" 
 
 export const fmtInt = (n) => NF0.format(n);
 export const fmtDec = (n, digits = 1) => (digits === 1 ? NF1.format(n) : new Intl.NumberFormat(LOCALE, { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(n));
+/** Betrag in US-Dollar, auf Cent gerundet: „1,23 $“. */
+export const fmtUsd = (n) => t("{usd} $", { usd: fmtDec(Math.round((n || 0) * 100) / 100, 2) });
 export const fmtDate = (ms) => (ms ? DF.format(new Date(ms)) : "");
 export const fmtTimeOfDay = (ms) => (ms ? TF.format(new Date(ms)) : "");
 export const fmtDateTime = (ms) => (ms ? t("{date}, {time} Uhr", { date: fmtDate(ms), time: fmtTimeOfDay(ms) }) : "");

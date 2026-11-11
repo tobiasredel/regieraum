@@ -296,7 +296,22 @@ def suggest(transcript: Any, show: Any, chapters: Any, previous_titles: Iterable
         data = json.loads(body or "")
     except (TypeError, ValueError) as e:
         raise ShownotesUnavailable("Die Antwort des KI-Dienstes war nicht lesbar. Bitte erneut versuchen.") from e
-    return _normalize(data, text, chapters, previous_titles, plan_text=_plan_urls(plan))
+    out = _normalize(data, text, chapters, previous_titles, plan_text=_plan_urls(plan))
+    cost = _cost_usd(model, getattr(resp, "usage", None))
+    if cost:
+        out["cost_usd"] = cost  # Größenordnung für die Kostenanzeige; wer es nicht braucht, ignoriert den Schlüssel
+    return out
+
+
+def _cost_usd(model: str, usage: Any) -> float:
+    """Kosten des Aufrufs in US-Dollar aus den Preisen des Pakets assist (fehlt es oder ist die Antwort ohne Verbrauch: 0)."""
+    if usage is None:
+        return 0.0
+    try:
+        from assist.util import usage_cost_usd
+        return round(float(usage_cost_usd(model, usage)), 4)
+    except Exception:  # noqa: BLE001
+        return 0.0
 
 
 def _plan_urls(plan: Iterable[Mapping[str, Any]]) -> str:

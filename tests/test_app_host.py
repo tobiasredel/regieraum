@@ -100,7 +100,7 @@ def test_settings_and_cover(client, app):
 
 def test_status(client):
     st = client.get("/api/host/status").json()
-    assert set(st) == {"storage", "turn", "ai", "stt", "assist", "whisper", "disk_free_bytes"}
+    assert set(st) == {"storage", "turn", "ai", "stt", "assist", "whisper", "disk_free_bytes", "archive", "costs"}
     assert st["turn"] == {"mode": "none", "configured": False} and st["ai"]["configured"] is False
     assert st["disk_free_bytes"] > 0
 

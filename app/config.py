@@ -36,6 +36,7 @@ class Config:
     ntfy_url: str
     ntfy_user: str
     ntfy_pass: str
+    archive_dir: Path | None = None
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -69,6 +70,7 @@ class Config:
             ntfy_url=_env("PS_NTFY_URL"),
             ntfy_user=_env("PS_NTFY_USER"),
             ntfy_pass=_env("PS_NTFY_PASS"),
+            archive_dir=Path(_env("PS_ARCHIVE_DIR")) if _env("PS_ARCHIVE_DIR") else None,
         )
 
     @property

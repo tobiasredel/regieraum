@@ -229,7 +229,7 @@ def main() -> None:
             print("Testdaten sind schon da (mit --force neu anlegen)")
             return
         for ep in db.all("SELECT id FROM episodes WHERE guid LIKE 'demo-%'"):
-            for t in ("tracks", "events", "jobs"):
+            for t in ("tracks", "events", "jobs", "costs"):
                 db.run(f"DELETE FROM {t} WHERE episode_id=?", (ep["id"],))
             shutil.rmtree(cfg.episode_dir(ep["id"]), ignore_errors=True)
         db.run("DELETE FROM episodes WHERE guid LIKE 'demo-%'")
@@ -298,7 +298,9 @@ def main() -> None:
         for key, kind, off, sound, payload in (
             ("start", "rec.start", 0, None, {}), ("intro", "sound.play", 500, "demosnd-intro", {}), ("pause", "rec.pause", 80000, None, {}),
             ("resume", "rec.resume", 95000, None, {}), ("blitz", "sound.play", 100000, "demosnd-blitz", {}), ("sting", "sound.play", 125000, "demosnd-sting", {}),
-            ("marker", "marker", 135000, None, {"label": "Hauptthema"}), ("outro", "sound.play", 158000, "demosnd-outro", {}), ("stop", "rec.stop", 164000, None, {}),
+            ("marker", "marker", 135000, None, {"label": "Hauptthema", "kind": "chapter"}),
+            ("note1", "marker", 41000, None, {"label": "Aussetzer prüfen", "kind": "note"}),
+            ("note2", "marker", 118000, None, {"label": "Zahl nachschlagen", "kind": "note"}), ("outro", "sound.play", 158000, "demosnd-outro", {}), ("stop", "rec.stop", 164000, None, {}),
         ):
             ev[key] = core.add_event(db, eid, kind, rec_start + off, sound, None, payload, event_id=f"demoev-{key}")
         chapters = [(0.5, "Intro"), (100.0, "Blitzlicht: Bahn und Begriffe"), (135.0, "Hauptthema: Zuständigkeit"), (158.0, "Outro")]
@@ -326,6 +328,8 @@ def main() -> None:
                "edl,ai,report) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                (eid, "review", "recorded", 12, None, None, None, None, 0, "full", "demo-review", rec_start, rec_start, rec_start + total, duration,
                 util.dumps(edl), util.dumps(ai), util.dumps(report)))
+        for kind, usd in (("research", 0.41), ("research", 0.27), ("companion", 0.92), ("shownotes", 0.06)):
+            core.add_cost(db, eid, kind, usd)
         for name, pid, track_id in (("Tobias", "demop-host", "demotr-tobias"), ("Max", "demop-max", "demotr-max")):
             tdir = cfg.episode_dir(eid) / "tracks" / track_id
             tdir.mkdir(parents=True, exist_ok=True)
@@ -359,6 +363,15 @@ def main() -> None:
                ("demoep-pub", "published", "recorded", 11, "Vom Sinn des Wartens", "Eine Stunde über Warteschleifen.", "<p>Warteschleifen, Hotlines und Geduld.</p>", 0, "full", "demo-pub",
                 now - 9 * DAY, now - 7 * DAY, 3_240_000, "media/demo-pub/demo-pub.mp3", (pdir / "episode.mp3").stat().st_size, "audio/mpeg",
                 util.dumps({"trim_start_ms": 0, "trim_end_ms": None, "cuts": []}), "{}"))
+
+        # Rohdaten der veröffentlichten Folge (für Speicher und Archiv): eine Rohspur und ein Zwischenstand
+        tdir = cfg.episode_dir("demoep-pub") / "tracks" / "demotr-pub"
+        tdir.mkdir(parents=True, exist_ok=True)
+        (tdir / "raw.flac").write_bytes(b"fLaC" + os.urandom(300_000))
+        (cfg.episode_dir("demoep-pub") / "work" / "stems").mkdir(parents=True, exist_ok=True)
+        (cfg.episode_dir("demoep-pub") / "work" / "stems" / "tobias.wav").write_bytes(os.urandom(120_000))
+        db.run("INSERT INTO tracks(id,episode_id,participant_id,participant_name,sample_rate,format,start_server_ms,total_frames,total_chunks,status,meta,created_at)"
+               " VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", ("demotr-pub", "demoep-pub", "demop-host", "Tobias", SR, "s24le", now - 9 * DAY, a["n"], 10, "assembled", "{}", now - 9 * DAY))
 
         # --- importierte Folgen ------------------------------------------------------------------------------
         titles = ["Auftakt: Wer sind wir überhaupt", "Das Beste kommt zum Schluss", "Politik ist, wenn man trotzdem lacht", "Fünf Gründe gegen Gründe",

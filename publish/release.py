@@ -15,16 +15,19 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping
+from urllib.parse import quote
 
 from .feed import build_feed
 from .imageinfo import image_info
 from .models import FeedEpisode, Show
+from . import site as site_pages
 from .naming import EXT_BY_MIME, guid_slug, short_hash, sibling_keys, slugify
 from .storage import FEED_CACHE, IMMUTABLE, Storage
 
 FEED_KEY = "feed.xml"
 FEED_TYPE = "application/rss+xml; charset=utf-8"
+PAGE_TYPE = "text/html; charset=utf-8"
 
 
 class CoverError(ValueError):
@@ -169,7 +172,21 @@ def _coerce(show: Any, episodes: Iterable[Any]) -> tuple[Show, list[FeedEpisode]
     return show, eps
 
 
-def render_feed(storage: Storage, show: Any, episodes: Iterable[Any]) -> str:
+def enclosure_url_fn(storage: Storage, mode: str = "off", prefix: str = "", app_base: str = "") -> Callable[[str], str] | None:
+    """Adresse der Audiodatei im Feed und auf der Seite je Zählmodus (SPEC Abschnitt 10, Downloads):
+    `app` -> `<app_base>/d/<schlüssel>` (die App zählt und leitet weiter), `prefix` -> Präfix eines Zähldienstes vor der
+    Adresse im Speicher (z. B. `https://op3.dev/e/`), sonst None (Adresse im Speicher). Gilt nur für Audiodateien."""
+    if mode == "app" and app_base:
+        return lambda key: f"{app_base.rstrip('/')}/d/{quote(key)}"
+    if mode == "prefix" and prefix.strip():
+        pre = prefix.strip()
+        pre = pre if pre.endswith("/") else pre + "/"
+        return lambda key: pre + storage.url(key)
+    return None
+
+
+def render_feed(storage: Storage, show: Any, episodes: Iterable[Any], *,
+                enclosure_url: Callable[[str], str] | None = None, site: "site_pages.SiteOptions | None" = None) -> str:
     """Feed-Text, wie `publish_feed` ihn hochladen würde (für die Vorschau). Verweise auf Kapitel- oder
     Transkriptdateien, die im Speicher fehlen, entfallen."""
     show, eps = _coerce(show, episodes)
@@ -181,12 +198,43 @@ def render_feed(storage: Storage, show: Any, episodes: Iterable[Any]) -> str:
         if tr and not storage.exists(tr):
             tr = None
         fixed.append(dataclasses.replace(e, chapters_key=ch, transcript_key=tr) if (ch, tr) != (e.chapters_key, e.transcript_key) else e)
-    return build_feed(show, fixed, url_for=storage.url)
+    link = (lambda e: storage.url(site_pages.episode_page_key(e.guid))) if site is not None and site.episode_links else None
+    return build_feed(show, fixed, url_for=storage.url, enclosure_url=enclosure_url, episode_link=link)
 
 
-def publish_feed(storage: Storage, show: Any, episodes: Iterable[Any]) -> str:
+def publish_site(storage: Storage, show: Any, episodes: Iterable[Any], site: "site_pages.SiteOptions", *,
+                 enclosure_url: Callable[[str], str] | None = None) -> list[str]:
+    """Baut die öffentliche Seite (`index.html`, `folgen/<slug>.html`) und lädt geänderte Seiten hoch (Cache 5 Minuten).
+    Was seit dem letzten Lauf unverändert ist (`site.known_hashes`), bleibt liegen. -> hochgeladene Schlüssel."""
+    show, eps = _coerce(show, episodes)
+    pages = site_pages.build_pages(show, eps, site, url_for=storage.url, enclosure_url=enclosure_url, feed_url=storage.url(FEED_KEY))
+    done = []
+    for key, html in pages.items():
+        digest = site_pages.checksum(html)
+        if site.known_hashes.get(key) == digest:
+            continue
+        storage.put_bytes(key, html.encode("utf-8"), PAGE_TYPE, FEED_CACHE)
+        site.known_hashes[key] = digest
+        done.append(key)
+    for key in [k for k in site.known_hashes if k not in pages]:
+        site.known_hashes.pop(key)  # Folge nicht mehr veröffentlicht (ihre Seite löscht `remove_episode_assets`)
+    return done
+
+
+def remove_site(storage: Storage, episodes: Iterable[Any]) -> list[str]:
+    """Löscht die öffentliche Seite (Seite abgeschaltet): `index.html` und die Seiten der übergebenen Folgen."""
+    keys = [site_pages.INDEX_KEY] + [site_pages.episode_page_key(_get(e, "guid")) for e in episodes if _get(e, "guid")]
+    return delete_keys(storage, keys)
+
+
+def publish_feed(storage: Storage, show: Any, episodes: Iterable[Any], *,
+                 enclosure_url: Callable[[str], str] | None = None, site: "site_pages.SiteOptions | None" = None) -> str:
     """Baut `feed.xml` aus den veröffentlichten Folgen, lädt ihn hoch (Cache 5 Minuten) und liefert die Feed-URL.
-    `episodes` enthält genau die Folgen, die im Feed stehen sollen (Status `published`)."""
-    xml = render_feed(storage, show, episodes)
+    `episodes` enthält genau die Folgen, die im Feed stehen sollen (Status `published`). Mit `site` entstehen zugleich
+    die Seiten der Show (`publish_site`); `enclosure_url` siehe `enclosure_url_fn`."""
+    episodes = list(episodes)
+    xml = render_feed(storage, show, episodes, enclosure_url=enclosure_url, site=site)
     storage.put_bytes(FEED_KEY, xml.encode("utf-8"), FEED_TYPE, FEED_CACHE)
+    if site is not None:
+        publish_site(storage, show, episodes, site, enclosure_url=enclosure_url)
     return storage.url(FEED_KEY)

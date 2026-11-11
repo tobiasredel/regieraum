@@ -176,11 +176,22 @@ class Companion:
             await self.report_error("Ende", exc)
         # Chunks, die nach dem Stopp noch eintreffen, werden bis zum Schluss angenommen
         self._pending = session
-        task = asyncio.get_running_loop().create_task(self._finish(session))
+        task = asyncio.get_running_loop().create_task(self._finish(session, self.episode_id))
         self._finishing.add(task)
         task.add_done_callback(self._finishing.discard)
 
-    async def _finish(self, session) -> None:
+    def _record_cost(self, session, episode_id: str | None) -> None:
+        """Summe der Sitzung (Mitschrift plus Hinweise) in die Kostentabelle; Fehler dabei stören nie."""
+        stats = getattr(session, "summary_stats", None)
+        if stats is None or not episode_id:
+            return
+        try:
+            s = stats()
+            core.add_cost(self.db, episode_id, "companion", (s.get("stt_cost_usd") or 0) + (s.get("llm_cost_usd") or 0))
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Kosten des Live-Begleiters: %r", exc)
+
+    async def _finish(self, session, episode_id: str | None = None) -> None:
         try:
             if self.grace_s:
                 await asyncio.sleep(self.grace_s)
@@ -197,6 +208,7 @@ class Companion:
                 await session.close()
             except Exception as exc:  # noqa: BLE001
                 log.warning("Live-Begleiter schließen: %r", exc)
+            self._record_cost(session, episode_id)
             if self._pending is session:
                 self._pending = None
 
@@ -222,6 +234,7 @@ class Companion:
                 await session.close()
             except Exception:  # noqa: BLE001
                 pass
+            self._record_cost(session, self.episode_id)
 
     async def set_enabled(self, on: bool) -> None:
         self.db.set_setting("assist", {**(self.db.get_setting("assist", {}) or {}), "enabled": bool(on)})
@@ -235,6 +248,7 @@ class Companion:
             elif not on and self.session is not None:
                 session, self.session = self.session, None
                 await session.close()
+                self._record_cost(session, self.episode_id)
         except Exception as exc:  # noqa: BLE001
             await self.report_error("Umschalten", exc)
         msg = None

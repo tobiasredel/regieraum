@@ -1,5 +1,7 @@
 # Regieraum
 
+[![Tests](https://github.com/tobiasredel/regieraum/actions/workflows/test.yml/badge.svg)](https://github.com/tobiasredel/regieraum/actions/workflows/test.yml)
+
 A self-hosted studio for conversation podcasts with a fixed running order. It covers the whole way from preparation
 to the published episode: research dossiers for each segment, a browser studio that records every participant
 locally, a live companion that follows the conversation, an audio pipeline on your own server, and your own RSS feed.
@@ -44,7 +46,7 @@ The interface is available in German and English. "Regieraum" is the German word
   depend on what the models can do. The prompts themselves are written in German.
 - Built for two regular hosts plus occasional guests. Up to four participants talk over a WebRTC mesh.
 - One host account. The host signs in with a password; everyone else joins through invitation links.
-- The Docker image is x86_64 only (the DeepFilterNet binary).
+- The Docker image is built for `linux/amd64` and `linux/arm64`.
 - The AI features are optional and use your own API keys: Anthropic for dossiers, live hints and show notes, OpenAI
   for the live transcript. Without keys the studio, the audio pipeline and the feed work as usual. As a rough guide
   from real use: a dossier costs about 0.30 to 1 USD per segment, the companion about 1 to 1.30 USD per hour of
@@ -58,12 +60,17 @@ You need Docker and, for anything beyond a local test, a domain with HTTPS. Brow
 `https://` or `localhost`.
 
 ```sh
-git clone https://github.com/tobiasredel/regieraum.git
-cd regieraum
-cp docker-compose.example.yml docker-compose.yml
-cp .env.example .env        # set PS_BASE_URL and PS_HOST_PASSWORD (at least 8 characters)
-docker compose up -d --build
+mkdir regieraum && cd regieraum
+curl -fsSLO https://raw.githubusercontent.com/tobiasredel/regieraum/main/docker-compose.example.yml
+curl -fsSLO https://raw.githubusercontent.com/tobiasredel/regieraum/main/.env.example
+mv docker-compose.example.yml docker-compose.yml
+mv .env.example .env        # set PS_BASE_URL and PS_HOST_PASSWORD (at least 8 characters)
+mkdir data && sudo chown 1000:1000 data
+docker compose up -d        # pulls ghcr.io/tobiasredel/regieraum
 ```
+
+To build from a clone instead, use `build: .` in the Compose file and `docker compose up -d --build`.
+Installation details (reverse proxy, storage, TURN, backups, updates) are in [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 Open `http://localhost:8000`, sign in, and then (page names as in the English interface; set `PS_LANG=en` in `.env`
 before the first start, or switch the language under Einstellungen):
@@ -78,11 +85,13 @@ before the first start, or switch the language under Einstellungen):
 
 ### Behind a reverse proxy
 
+Examples for Caddy and Traefik are in [docs/OPERATIONS.md](docs/OPERATIONS.md#reverse-proxy).
+
 - Pass WebSocket connections through (`/ws/p`).
 - Do not send a `Permissions-Policy` header that blocks `microphone` or `camera`.
 - With `PS_HOST_AUTH=password` the app protects everything itself except the paths guests need. With
   `PS_HOST_AUTH=proxy` the app checks nothing and your proxy has to protect every path except `/join/`, `/api/join`,
-  `/api/p/`, `/ws/p`, `/static/`, `/public/` and `/healthz`.
+  `/api/p/`, `/ws/p`, `/static/`, `/public/`, `/d/` (download counting and redirect) and `/healthz`.
 
 ### Connections from mobile networks
 
@@ -114,7 +123,7 @@ No Python on the host is needed, everything runs in a container:
 ./dev.sh serve 8197             # app with reload on http://127.0.0.1:8197, no login
 ```
 
-Browser tests live in `tests/e2e/` (studio) and `tests/e2e-manage/` (management pages) and use Playwright with
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow. Browser tests live in `tests/e2e/` (studio) and `tests/e2e-manage/` (management pages) and use Playwright with
 Chromium's fake camera and microphone. `docs/SPEC.md` is the specification the code follows: data model, protocol,
 audio pipeline and prompts.
 

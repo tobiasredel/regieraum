@@ -6,10 +6,16 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ffmpeg curl ca-certificates tzdata \
  && rm -rf /var/lib/apt/lists/*
 
-# DeepFilterNet als eigenständiges Binary (Modell eingebettet, kein PyTorch nötig)
+# DeepFilterNet als eigenständiges Binary (Modell eingebettet, kein PyTorch nötig); amd64 und arm64 (aarch64, glibc)
 ARG DEEPFILTER_VERSION=0.5.6
-RUN curl -fsSL -o /usr/local/bin/deep-filter \
-      "https://github.com/Rikorose/DeepFilterNet/releases/download/v${DEEPFILTER_VERSION}/deep-filter-${DEEPFILTER_VERSION}-x86_64-unknown-linux-musl" \
+ARG TARGETARCH
+RUN case "${TARGETARCH:-$(dpkg --print-architecture)}" in \
+      amd64) DF=x86_64-unknown-linux-musl ;; \
+      arm64) DF=aarch64-unknown-linux-gnu ;; \
+      *) echo "Architektur ${TARGETARCH} wird nicht unterstützt" >&2; exit 1 ;; \
+    esac \
+ && curl -fsSL -o /usr/local/bin/deep-filter \
+      "https://github.com/Rikorose/DeepFilterNet/releases/download/v${DEEPFILTER_VERSION}/deep-filter-${DEEPFILTER_VERSION}-${DF}" \
  && chmod +x /usr/local/bin/deep-filter
 
 COPY requirements.txt /tmp/requirements.txt

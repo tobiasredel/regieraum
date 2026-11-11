@@ -63,8 +63,10 @@ def build(db: DB, cfg: Config, episode_id: str) -> dict:
             "gain_db": s["gain_db"], "kind": s["kind"], "chapter_title": chapter,
         })
     marker_name = i18n.tr(i18n.ui_lang(db), "Marker")
+    # Kapitel-Marker; Merkpunkte (`payload.kind == "note"`) sind nur für den Schnitt und gehen als eigene Liste mit
     markers = [{"at_ms": e["server_ms"] - start, "label": e["payload"].get("label") or marker_name}
-               for e in events if e["kind"] == "marker"]
+               for e in events if e["kind"] == "marker" and not core.is_note(e)]
+    notes = [{"at_ms": n["session_ms"], "label": n["label"]} for n in core.notes_of(db, ep)]
 
     show = settings["show"]
     lang = i18n.show_lang(db)  # Sprache der Inhalte: Show-Sprache für Transkription und Dateikennzeichnung
@@ -74,7 +76,7 @@ def build(db: DB, cfg: Config, episode_id: str) -> dict:
     return {
         "episode_id": episode_id, "language": lang, "work_dir": str(edir / "work"), "out_dir": str(edir / "out"),
         "rec_start_server_ms": start, "rec_stop_server_ms": stop,
-        "tracks": tracks, "sounds": sounds, "markers": markers, "edl": ep["edl"], "audio": settings["audio"],
+        "tracks": tracks, "sounds": sounds, "markers": markers, "notes": notes, "edl": ep["edl"], "audio": settings["audio"],
         "tags": {"title": title, "artist": show["author"], "album": show["title"], "track": ep["number"], "year": year,
                  "cover_path": str(cover) if cover and cover.exists() else None},
     }

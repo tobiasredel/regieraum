@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from pathlib import Path
 
-from . import core, util
+from . import core, i18n, util
 from .config import Config
 from .db import DB
 
@@ -35,16 +36,77 @@ def _published_rows(db: DB) -> list[dict]:
     return db.all("SELECT * FROM episodes WHERE status='published' AND audio_key IS NOT NULL AND audio_bytes IS NOT NULL")
 
 
+def _theme_css() -> str:
+    try:
+        return (Path(__file__).parent / "static" / "design" / "tokens-unprefixed.css").read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def _chapters_by_guid(cfg: Config, rows: list[dict]) -> dict[str, list[dict]]:
+    out: dict[str, list[dict]] = {}
+    for r in rows:
+        path = cfg.episode_dir(r["id"]) / "out" / "chapters.json"
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            out[r["guid"]] = [{"start_ms": int(float(c.get("startTime") or 0) * 1000), "title": c.get("title") or ""}
+                              for c in data.get("chapters") or []]
+        except (OSError, ValueError, AttributeError):
+            continue
+    return out
+
+
+def _feed_parts(db: DB, cfg: Config, st, rows: list[dict]) -> dict:
+    """Show-Daten, Audioadressen und Optionen der öffentlichen Seite für `release.render_feed`/`publish_feed`.
+
+    `link` im Feed: Hat der Nutzer einen eigenen gespeichert (nicht die Standardadresse der App), gilt er. Sonst zeigt er auf
+    die öffentliche Seite (`index.html` im Speicher), solange sie an ist, sonst bleibt es bei `PS_BASE_URL`."""
+    from publish import release, site as site_pages
+
+    settings = core.get_settings(db, cfg)
+    show = dict(settings["show"])
+    site_cfg, stats = settings["site"], settings["stats"]
+    site = None
+    if site_cfg["enabled"]:
+        if not core.show_link_is_custom(db, cfg):
+            show["link"] = st.url(site_pages.INDEX_KEY)
+        lang = i18n.content_lang(show.get("language"))
+        page_lang = lang if lang in i18n.LANGUAGES else "en"
+        stored = db.get_setting("site_pages", {}) or {}
+        known = dict(stored.get("hashes") or {}) if stored.get("base") == st.url(site_pages.INDEX_KEY) else {}
+        site = site_pages.SiteOptions(
+            platforms=site_cfg["platforms"], lang=page_lang, tr=lambda text, **p: i18n.tr(page_lang, text, **p),
+            css=_theme_css(), chapters=_chapters_by_guid(cfg, rows), known_hashes=known,
+            episode_links=not core.show_link_is_custom(db, cfg))
+    enclosure = release.enclosure_url_fn(st, stats["mode"], stats["prefix"], cfg.base_url)
+    return {"show": show, "enclosure_url": enclosure, "site": site}
+
+
 def feed_xml(db: DB, cfg: Config) -> str:
     from publish import release
 
-    return release.render_feed(storage(), core.get_settings(db, cfg)["show"], _published_rows(db))
+    st, rows = storage(), _published_rows(db)
+    parts = _feed_parts(db, cfg, st, rows)
+    return release.render_feed(st, parts["show"], rows, enclosure_url=parts["enclosure_url"], site=parts["site"])
 
 
 def rebuild_feed(db: DB, cfg: Config, st=None) -> None:
+    """Feed und, wenn eingeschaltet, öffentliche Seite (`index.html`, `folgen/<slug>.html`) neu bauen und hochladen."""
+    from publish import release, site as site_pages
+
+    st, rows = st or storage(), _published_rows(db)
+    parts = _feed_parts(db, cfg, st, rows)
+    release.publish_feed(st, parts["show"], rows, enclosure_url=parts["enclosure_url"], site=parts["site"])
+    if parts["site"] is not None:
+        db.set_setting("site_pages", {"base": st.url(site_pages.INDEX_KEY), "hashes": parts["site"].known_hashes})
+
+
+def remove_site(db: DB, cfg: Config) -> None:
+    """Öffentliche Seite abgeschaltet: ihre Dateien aus dem Speicher nehmen (der Feed bleibt)."""
     from publish import release
 
-    release.publish_feed(st or storage(), core.get_settings(db, cfg)["show"], _published_rows(db))
+    release.remove_site(storage(), _published_rows(db))
+    db.set_setting("site_pages", {})
 
 
 def refresh_feed(db: DB, cfg: Config) -> bool:
@@ -128,7 +190,7 @@ def publish_episode(db: DB, cfg: Config, episode_id: str, progress: Callable[[fl
 
 
 def unpublish_episode(db: DB, cfg: Config, episode_id: str) -> None:
-    from publish import release
+    from publish import release, site as site_pages
 
     ep = core.get_episode(db, episode_id)
     if ep is None:
@@ -140,6 +202,7 @@ def unpublish_episode(db: DB, cfg: Config, episode_id: str) -> None:
                         audio_key=None, audio_bytes=None, audio_mime=None)
     rebuild_feed(db, cfg, st)  # zuerst die Folge aus dem Feed nehmen, dann ihre Dateien löschen
     release.remove_episode_assets(st, ep)
+    release.delete_keys(st, [site_pages.episode_page_key(ep["guid"])])  # Folgenseite der öffentlichen Seite
 
 
 def import_feed(db: DB, cfg: Config, feed_url: str, progress: Callable[[float, str], None] = lambda *_: None) -> str:
@@ -212,6 +275,9 @@ def suggest(db: DB, cfg: Config, episode_id: str) -> dict | None:
     if any(s["title"] or s["input"] for s in plan):
         extra["plan"] = plan  # Quellen und Good Read aus dem Sendeplan
     try:
-        return _suggest(transcript, show, chapters, previous, model=cfg.ai_model, **extra)
+        result = _suggest(transcript, show, chapters, previous, model=cfg.ai_model, **extra)
     except ShownotesUnavailable as exc:
         raise PublishError(str(exc)) from exc
+    if isinstance(result, dict):
+        core.add_cost(db, episode_id, "shownotes", result.pop("cost_usd", 0) or 0)
+    return result

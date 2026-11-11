@@ -70,6 +70,16 @@ def test_chapters_move_to_cut_edge_and_dedupe():
     assert ch[1]["event_id"] == "e1"
 
 
+def test_notes_never_become_chapters():
+    """Merkpunkte stehen im Manifest unter `notes`; selbst im Marker-Feld verirrt, setzen sie kein Kapitel."""
+    m = {"rec_start_server_ms": 0, "rec_stop_server_ms": 70000, "edl": EDL, "sounds": [],
+         "markers": [{"at_ms": 40000, "label": "Wetter"}, {"at_ms": 45000, "label": "Prüfen", "kind": "note"},
+                     {"at_ms": 50000, "label": "Neu", "kind": "chapter"}],
+         "notes": [{"at_ms": 42000, "label": "Zahl prüfen"}]}
+    ch = tl.chapters(m)
+    assert [(c["startTime"], c["title"]) for c in ch] == [(29.0, "Wetter"), (39.0, "Neu")]
+
+
 def test_snap_and_sound_end():
     assert tl.snap_to_episode(22000, EDL) == 19000
     assert tl.snap_to_episode(0, EDL) == 0

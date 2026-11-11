@@ -1,6 +1,7 @@
 """Fachlogik, die REST, WebSocket und Jobs gemeinsam nutzen."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,7 @@ DEFAULT_SHOW = {
     "copyright": "",
     "cover_key": None,
 }
+DEFAULT_ARCHIVE = {"after_days": 14}  # Rohdaten ins Archiv, so viele Tage nach dem Veröffentlichen (0 = sofort)
 DEFAULT_AUDIO = {"target_lufs": -16, "true_peak_db": -1.0, "denoise": "normal", "crossgate": True, "mp3_kbps": 160}
 
 
@@ -95,8 +97,44 @@ def get_settings(db: DB, cfg: Config) -> dict:
             **db.get_setting("show", {})}
     audio = {**DEFAULT_AUDIO, **db.get_setting("audio", {})}
     assist = {"enabled": False, **db.get_setting("assist", {})}
+    archive = {**DEFAULT_ARCHIVE, **(db.get_setting("archive", {}) or {}), "available": cfg.archive_dir is not None}
     return {"show": show, "audio": audio, "assist": assist, "profile": get_profile(db), "format": get_format(db),
-            "ui": {"language": i18n.ui_lang(db)}}
+            "ui": {"language": i18n.ui_lang(db)}, "archive": archive, "site": get_site(db), "stats": get_stats(db)}
+
+
+# --- Öffentliche Seite und Download-Zählung (SPEC Abschnitte 10 und 15) ---------------------------------
+STATS_MODES = ("off", "app", "prefix")
+MAX_PLATFORMS = 6
+
+
+def get_site(db: DB) -> dict:
+    """Öffentliche Seite der Show: `enabled` (Standard an) und `platforms` ([{name, url}], höchstens 6)."""
+    stored = db.get_setting("site", {}) or {}
+    return {"enabled": bool(stored.get("enabled", True)), "platforms": clean_platforms(stored.get("platforms"))}
+
+
+def clean_platforms(items) -> list[dict]:
+    """Nur Einträge mit Namen und http(s)-Adresse, höchstens `MAX_PLATFORMS`."""
+    out = []
+    for it in items or []:
+        name = str((it or {}).get("name") or "").strip()[:60]
+        url = str((it or {}).get("url") or "").strip()
+        if name and re.fullmatch(r"https?://[^\s<>\"']+", url, re.I):
+            out.append({"name": name, "url": url})
+    return out[:MAX_PLATFORMS]
+
+
+def get_stats(db: DB) -> dict:
+    """Download-Zählung: `mode` (`off`, `app`, `prefix`) und `prefix` (Adresse des Zähldienstes für `prefix`)."""
+    stored = db.get_setting("stats", {}) or {}
+    mode = stored.get("mode") if stored.get("mode") in STATS_MODES else "off"
+    return {"mode": mode, "prefix": str(stored.get("prefix") or "")}
+
+
+def show_link_is_custom(db: DB, cfg: Config) -> bool:
+    """Hat der Nutzer einen eigenen `link` der Show gespeichert? Die Standardadresse der App (`PS_BASE_URL`) zählt nicht."""
+    link = str((db.get_setting("show", {}) or {}).get("link") or "").strip()
+    return bool(link) and link.rstrip("/") != cfg.base_url.rstrip("/")
 
 
 # --- Teilnehmer und Einladungen -----------------------------------------
@@ -276,7 +314,8 @@ def discard_recording(db: DB, ep: dict) -> str:
         c.execute("UPDATE segments SET visited_at=NULL, updated_at=? WHERE episode_id=?", (util.now_ms(), eid))
         c.execute("UPDATE episodes SET status='draft', rec_start_server_ms=NULL, rec_stop_server_ms=NULL, duration_ms=NULL, "
                   "publish_at=NULL, published_at=NULL, audio_key=NULL, audio_bytes=NULL, audio_mime=NULL, edl=?, ai=NULL, "
-                  "report=NULL, title=NULL, summary=NULL, description_html=NULL WHERE id=?", (util.dumps(DEFAULT_EDL), eid))
+                  "report=NULL, title=NULL, summary=NULL, description_html=NULL, archived_at=NULL, archive_path=NULL "
+                  "WHERE id=?", (util.dumps(DEFAULT_EDL), eid))
     set_studio_choice(db, eid)
     return eid
 
@@ -375,8 +414,26 @@ def edited_duration_ms(ep: dict) -> int | None:
     return session_to_episode_ms(total if edl.get("trim_end_ms") is None else edl["trim_end_ms"], edl) if total > 0 else 0
 
 
+def is_note(event: dict) -> bool:
+    """Ein Marker-Ereignis mit `payload.kind == "note"` ist ein Merkpunkt für den Schnitt; alles andere (auch alte
+    Ereignisse ohne `kind`) setzt ein Kapitel."""
+    return event["kind"] == "marker" and (event.get("payload") or {}).get("kind") == "note"
+
+
+def notes_of(db: DB, ep: dict) -> list[dict]:
+    """Merkpunkte der Aufnahme: [{event_id, session_ms, label}] in Sitzungszeit, aufsteigend. Sie sind nur für den
+    Schnitt da und kommen weder in Kapitel noch in den Feed."""
+    start = ep["rec_start_server_ms"]
+    if start is None:
+        return []
+    default = i18n.tr(i18n.ui_lang(db), "Merkpunkt")
+    return [{"event_id": e["id"], "session_ms": e["server_ms"] - start,
+             "label": ((e["payload"] or {}).get("label") or "").strip() or default}
+            for e in events_of(db, ep["id"]) if is_note(e)]
+
+
 def chapters_preview(db: DB, ep: dict) -> list[dict]:
-    """Kapitelvorschau aus Jingle-Klicks und Markern, Zeiten in Folgenzeit (nach dem Schnitt)."""
+    """Kapitelvorschau aus Jingle-Klicks und Kapitel-Markern, Zeiten in Folgenzeit (nach dem Schnitt)."""
     start = ep["rec_start_server_ms"]
     if start is None:
         return []
@@ -390,7 +447,7 @@ def chapters_preview(db: DB, ep: dict) -> list[dict]:
             s = sounds[e["sound_id"]]
             default = chapter_default(s, e, segs, fmt)
             items.append((e, s["kind"], default, e["sound_id"]))
-        elif e["kind"] == "marker":
+        elif e["kind"] == "marker" and not is_note(e):
             items.append((e, "marker", e["payload"].get("label") or i18n.tr(i18n.ui_lang(db), "Marker"), None))
     out, seen = [], set()
     for e, kind, default, sound_id in items:
@@ -497,3 +554,56 @@ def planned_chapter_events(db: DB, episode_id: str) -> set[str]:
     return {e["id"] for e in events_of(db, episode_id)
             if e["kind"] == "sound.play" and sounds.get(e["sound_id"], {}).get("kind") in ("segment", "sting")
             and (segs.get((e["payload"] or {}).get("segment_id") or "") or {}).get("title")}
+
+
+# --- Kosten der KI-Vorgänge --------------------------------------------------------------------------------
+COST_KINDS = ("research", "companion", "shownotes")
+
+
+def add_cost(db: DB, episode_id: str | None, kind: str, usd: float, segment_id: str | None = None) -> None:
+    """Kosten eines Vorgangs in US-Dollar festhalten (Recherche, Live-Begleiter, Shownotes). Null und Unsinn zählen nicht."""
+    try:
+        usd = float(usd)
+    except (TypeError, ValueError):
+        return
+    if kind not in COST_KINDS or not usd > 0 or usd == float("inf"):
+        return
+    db.run("INSERT INTO costs(id,episode_id,segment_id,kind,usd,created_at) VALUES(?,?,?,?,?,?)",
+           (util.new_id(), episode_id, segment_id, kind, round(usd, 4), util.now_ms()))
+
+
+def _sum_costs(rows: list[dict]) -> dict:
+    by_kind = {k: 0.0 for k in COST_KINDS}
+    for r in rows:
+        by_kind[r["kind"]] = by_kind.get(r["kind"], 0.0) + r["usd"]
+    return {"total": round(sum(by_kind.values()), 4), "by_kind": {k: round(v, 4) for k, v in by_kind.items()}}
+
+
+def costs_of(db: DB, episode_id: str) -> dict:
+    """Kosten einer Folge: {total, by_kind: {research, companion, shownotes}} in US-Dollar."""
+    return _sum_costs(db.all("SELECT kind, usd FROM costs WHERE episode_id=?", (episode_id,)))
+
+
+def segment_costs(db: DB, episode_id: str) -> dict[str, float]:
+    """Recherchekosten je Abschnitt (US-Dollar)."""
+    out: dict[str, float] = {}
+    for r in db.all("SELECT segment_id, SUM(usd) AS usd FROM costs WHERE episode_id=? AND kind='research' AND segment_id IS NOT NULL "
+                    "GROUP BY segment_id", (episode_id,)):
+        out[r["segment_id"]] = round(r["usd"], 4)
+    return out
+
+
+def month_costs(db: DB, now_ms: int | None = None) -> dict:
+    """Kosten im laufenden und im Vormonat (UTC): {current: {month, total, by_kind}, previous: {...}}."""
+    import datetime as dt
+
+    now = dt.datetime.fromtimestamp((now_ms if now_ms is not None else util.now_ms()) / 1000, dt.timezone.utc)
+    first = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    prev = (first - dt.timedelta(days=1)).replace(day=1)
+    out = {}
+    for name, a, b in (("current", first, None), ("previous", prev, first)):
+        lo = int(a.timestamp() * 1000)
+        hi = int(b.timestamp() * 1000) if b else 2 ** 62
+        rows = db.all("SELECT kind, usd FROM costs WHERE created_at>=? AND created_at<?", (lo, hi))
+        out[name] = {"month": a.strftime("%Y-%m"), **_sum_costs(rows)}
+    return out

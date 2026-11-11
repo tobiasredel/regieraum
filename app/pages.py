@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -45,7 +45,9 @@ def render(request: Request, name: str, title: str, **ctx) -> HTMLResponse:
         show_title = i18n.tr(lang, "Mein Podcast")
     context = {"request": request, "v": asset_version(), "base_url": request.app.state.cfg.base_url,
                "show_title": show_title, "host_auth": request.app.state.cfg.host_auth,
-               "lang": lang, "t": lambda text, **kw: i18n.tr(lang, text, **kw), **ctx}
+               "lang": lang, "t": lambda text, **kw: i18n.tr(lang, text, **kw),
+               # Home-Bildschirm (Manifest, Symbol): nur Host-Seiten, nie die Gastseite und nicht die Anmeldung
+               "app_shell": name not in ("join.html", "login.html"), **ctx}
     if (TEMPLATES_DIR / name).exists():
         return templates.TemplateResponse(request, name, context)
     body = (f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8">'
@@ -54,6 +56,28 @@ def render(request: Request, name: str, title: str, **ctx) -> HTMLResponse:
             f'<body><main style="max-width:40rem;margin:4rem auto;padding:0 1rem"><h1>{html.escape(i18n.tr(lang, title))}</h1>'
             f'<p>{html.escape(i18n.tr(lang, "Diese Seite ist noch nicht gebaut."))}</p></main></body></html>')
     return HTMLResponse(body)
+
+
+@router.get("/app.webmanifest", include_in_schema=False)
+def webmanifest(request: Request):
+    """Web-App-Manifest für den Home-Bildschirm (iPhone, iPad, Android). Liegt hinter der Host-Anmeldung."""
+    from . import i18n
+
+    lang = i18n.ui_lang(request.app.state.db)
+    try:
+        title = request.app.state.db.get_setting("show", {}).get("title") or i18n.tr(lang, "Mein Podcast")
+    except Exception:  # noqa: BLE001
+        title = i18n.tr(lang, "Mein Podcast")
+    short = title if len(title) <= 12 else title[:11].rstrip() + "…"
+    v = asset_version()
+    return JSONResponse({
+        "name": title, "short_name": short, "lang": lang, "id": "/studio", "start_url": "/studio", "scope": "/",
+        "display": "standalone", "orientation": "any",
+        # feste Werte des Standard-Themas (--paper); ein eigenes Thema ersetzt sie hier und in _base.html
+        "background_color": "#F5F7FA", "theme_color": "#F5F7FA",
+        "icons": [{"src": f"/static/icons/icon-192.png?v={v}", "sizes": "192x192", "type": "image/png"},
+                  {"src": f"/static/icons/icon-512.png?v={v}", "sizes": "512x512", "type": "image/png"}],
+    }, media_type="application/manifest+json", headers={"Cache-Control": "no-cache"})
 
 
 @router.get("/", include_in_schema=False)

@@ -265,7 +265,9 @@ export class PlanColumn {
     const seg = { ...base, ...(this.segments.get(id) || {}) };
     // nur neu zeichnen, wenn sich etwas geändert hat: aufgeklappte Abschnitte bleiben offen
     const mine = (k) => k.startsWith(id + "|");
-    const key = JSON.stringify([id, seg, this.supported, this.live, [...this.said].filter(mine), [...this.manual].filter(([k]) => mine(k))]);
+    // Besuchsmarken ändern nichts am Dossier: nicht neu zeichnen (sonst klappt Aufgeklapptes wieder zu)
+    const { visited, visited_at: _va, ...stable } = seg;
+    const key = JSON.stringify([id, stable, this.supported, this.live, [...this.said].filter(mine), [...this.manual].filter(([k]) => mine(k))]);
     if (key === this.dossierKey) return;
     this.dossierKey = key;
     const d = asObj(seg.dossier);
@@ -379,8 +381,11 @@ export class PlanColumn {
         h("p", { class: "ps-terms" }, d.begriffe.map((b) => h("button", { type: "button", class: "ps-term", title: t("Nachschlagen"), onclick: () => this.lookup(b), disabled: !this.supported }, b))));
     }
     if (more.length) {
-      blocks.push(h("details", { class: "ps-fold ps-more" },
-        h("summary", {}, icon("chevron-right", "ps-chev"), h("span", {}, names.join(", "))), more));
+      // aufgeklappt bleibt aufgeklappt, auch wenn das Dossier neu gezeichnet wird
+      const fold = h("details", { class: "ps-fold ps-more", open: this.moreOpen === seg.id },
+        h("summary", {}, icon("chevron-right", "ps-chev"), h("span", {}, names.join(", "))), more);
+      fold.addEventListener("toggle", () => { this.moreOpen = fold.open ? seg.id : null; });
+      blocks.push(fold);
     }
     return blocks;
   }

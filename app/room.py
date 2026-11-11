@@ -262,7 +262,7 @@ class Room:
         elif t == "sound.stop":
             await self.sound_stop(str(msg.get("event_id")), msg.get("fade_ms"))
         elif t == "marker":
-            await self.marker(str(msg.get("label") or "").strip()[:120])
+            await self.marker(str(msg.get("label") or "").strip()[:120], msg.get("kind"))
         elif t.startswith("assist."):
             await self.assist(t, msg)
         else:
@@ -407,12 +407,18 @@ class Room:
             del self.active[event_id]
             await self.send_room()
 
-    async def marker(self, label: str) -> None:
+    async def marker(self, label: str, kind: object = None) -> None:
+        """Merkpunkt (`note`, nur für den Schnitt) oder Kapitel (`chapter`, kommt in die Folge).
+
+        Unbekannte Werte gelten als `note`: Ein Tippfehler darf den Zeitpunkt nicht kosten, und ein Merkpunkt
+        ist die harmlose Art, denn er taucht nie in der fertigen Folge auf.
+        """
         ep = self._recording()
         at = util.now_ms()
-        label = label or i18n.tr(self.lang, "Marker")
-        core.add_event(self.db, ep["id"], "marker", at, payload={"label": label})
-        await self.broadcast({"type": "marker", "label": label, "at": at - ep["rec_start_server_ms"]})
+        kind = kind if kind in ("note", "chapter") else "note"
+        label = label or i18n.tr(self.lang, "Marker" if kind == "chapter" else "Merkpunkt")
+        core.add_event(self.db, ep["id"], "marker", at, payload={"label": label, "kind": kind})
+        await self.broadcast({"type": "marker", "label": label, "kind": kind, "at": at - ep["rec_start_server_ms"]})
 
     # --- Live-Begleiter (nur Host) ---------------------------------------------------------------------------
     async def set_segment(self, episode_id: str, segment_id: str | None) -> None:

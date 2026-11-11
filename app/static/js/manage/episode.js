@@ -1,6 +1,6 @@
 // Folge prüfen: Hören, Schneiden, Angaben, Klangbericht, Transkript, Rohspuren, Veröffentlichen.
 import {
-  $, api, button, clear, confirmDialog, errorText, field, fmtClock, fmtDate, fmtDateTime, fmtDuration, h, icon, poll,
+  $, api, button, clear, confirmDialog, errorText, field, fmtBytes, fmtClock, fmtDate, fmtDateTime, fmtDuration, fmtInt, fmtUsd, h, icon, poll,
   progressBar, rich, statusClass, statusText, t, toast,
 } from "./common.js";
 import { CutEditor } from "./waveform.js";
@@ -12,7 +12,7 @@ const id = root.dataset.episode;
 const state = { ep: null, sounds: [], settings: null, editor: null, notes: null, stopWatch: null, sig: "", meta: null, base: null, banner: null, ui: {} };
 
 const isBusy = (ep) => ep.status === "processing" || ep.status === "uploading" || (ep.jobs || []).some((j) => j.status === "queued" || j.status === "running");
-const signature = (ep) => `${ep.status}|${JSON.stringify(ep.files)}|${ep.source}`;
+const signature = (ep) => `${ep.status}|${JSON.stringify(ep.files)}|${ep.source}|${ep.archived_at || ""}`;
 const runningJob = (ep) => (ep.jobs || []).find((j) => j.status === "running") || (ep.jobs || []).find((j) => j.status === "queued");
 
 // --- Laden -----------------------------------------------------------------------------------
@@ -51,6 +51,7 @@ function watch() {
       renderBanner();
       if (aiChanged) renderSuggestions();
       updatePublishJob();
+      drawStorage();
     }
     return isBusy(next);
   }, 2500);
@@ -84,6 +85,10 @@ function render() {
   if (ep.audio_key || ep.files.episode) {
     root.append(listenSection(ep));
   }
+  if (ep.status === "published") {
+    root.append(downloadsSection());
+    nav.push(["downloads", t("Downloads")]);
+  }
   if (reviewable && ep.source === "recorded" && ep.files.mix && ep.files.peaks) {
     root.append(editorSection(ep));
     nav.push(["schnitt", t("Schnitt")]);
@@ -107,6 +112,14 @@ function render() {
   if (reviewable) {
     root.append(publishSection(ep));
     nav.push(["veroeffentlichen", t("Veröffentlichen")]);
+  }
+  if (ep.source === "recorded" && ep.status !== "draft") {
+    root.append(storageSection(ep));
+    nav.push(["speicher", ep.archived_at ? t("Rohdaten im Archiv") : t("Speicher")]);
+  }
+  if (ep.source === "recorded" || (ep.costs?.total || 0) > 0) {
+    root.append(costSection(ep));
+    nav.push(["kosten", t("KI-Kosten")]);
   }
   if (ep.source === "recorded" && ["uploading", "processing", "review", "failed"].includes(ep.status)) root.append(discardSection(ep));
   if (["draft", "review", "failed"].includes(ep.status)) root.append(deleteSection(ep));
@@ -246,24 +259,39 @@ function editorLines(ep) {
   return lines;
 }
 
+function notesList(ep) {
+  const notes = ep.notes || [];
+  if (!notes.length) return null;
+  const ul = h("ul", { class: "m-chap-list m-notes" });
+  for (const n of notes) {
+    ul.append(h("li", null,
+      h("button", { type: "button", class: "m-linkbtn m-num m-chap-time", title: t("Zu diesem Merkpunkt springen, zwei Sekunden vorher"), onclick: () => { state.editor?.seekNote(n.session_ms); state.editor?.stage.focus({ preventScroll: true }); } }, fmtClock(n.session_ms)),
+      h("span", { class: "m-note-label" }, n.label)));
+  }
+  return h("div", { class: "m-ed-notes" }, h("h3", { class: "m-h3" }, t("Merkpunkte")), ul,
+    h("p", { class: "tr-small" }, t("Während der Aufnahme gesetzt, nur für den Schnitt. Zeiten wie in der Wellenform")));
+}
+
 function editorSection(ep) {
   const host = h("div", { class: "m-ed-host" }, h("p", { class: "tr-small" }, t("Wellenform wird geladen")));
   const status = h("p", { class: "m-save-state", role: "status" });
   state.ui.edlStatus = status;
   const bSave = button(t("Schnitt speichern"), { icon: null, onclick: () => saveEdl().catch(() => {}) });
-  const bMix = button(t("Neu mischen"), { icon: "refresh", onclick: remix, disabled: ep.status !== "review" });
+  const bMix = button(t("Neu mischen"), { icon: "refresh", onclick: remix, disabled: ep.status !== "review" || !!ep.archived_at, title: ep.archived_at ? t("Die Rohdaten liegen im Archiv und müssen zuerst zurückgeholt werden") : undefined });
   state.ui.bSave = bSave;
   const sec = section("schnitt", t("Schnitt"),
     h("p", { class: "m-lead" }, t("Die Ansicht zeigt die ungeschnittene Mischung. Pausen sind schon als Schnitte enthalten. Zeiten in der Ansicht sind Zeiten der Aufnahme, die Länge der fertigen Folge steht darunter.")),
     host,
     h("div", { class: "app-row m-ed-save" }, bSave, bMix, status),
-    h("p", { class: "tr-small" }, t("Gespeicherte Schnitte und Kapitelnamen wirken in der fertigen Folge erst nach dem Neumischen. Das dauert einige Minuten.")));
+    h("p", { class: "tr-small" }, t("Gespeicherte Schnitte und Kapitelnamen wirken in der fertigen Folge erst nach dem Neumischen. Das dauert einige Minuten.")),
+    notesList(ep));
   api(`/episodes/${encodeURIComponent(id)}/peaks`).then((peaks) => {
     if (!peaks || !Array.isArray(peaks.peaks) || !peaks.peaks.length) throw new Error(t("Die Wellenform ist leer"));
     clear(host);
     state.editor = new CutEditor({
       audioUrl: `/api/host/episodes/${encodeURIComponent(id)}/audio/mix`,
       peaks, edl: ep.edl, lines: editorLines(ep), pauses: pausesOf(ep),
+      notes: (ep.notes || []).map((n) => ({ ms: n.session_ms, label: n.label })),
       onChange: () => updateDirty(),
     });
     host.append(state.editor.el);
@@ -551,7 +579,7 @@ function tracksSection(ep) {
     const dur = tk.total_frames && tk.sample_rate ? fmtDuration((tk.total_frames / tk.sample_rate) * 1000) : "";
     const link = tk.has_raw
       ? h("a", { class: "tr-btn tr-btn-secondary tr-btn-nav", href: `/api/host/episodes/${encodeURIComponent(id)}/tracks/${encodeURIComponent(tk.id)}/raw`, download: "" }, icon("download"), t("Rohspur laden"))
-      : h("span", { class: "tr-small" }, t("Noch nicht zusammengesetzt"));
+      : h("span", { class: "tr-small" }, ep.archived_at ? t("Im Archiv") : t("Noch nicht zusammengesetzt"));
     ul.append(h("li", null, h("div", { class: "tr-item m-track" },
       h("div", { class: "m-ep-text" }, h("strong", { class: "m-ep-title" }, tk.participant_name), h("p", { class: "m-meta" }, h("span", { class: tk.status === "incomplete" ? "tr-status-warn" : "" }, trackStatus(tk.status)), dur ? h("span", { class: "m-sep", "aria-hidden": "true" }, "·") : null, dur ? h("span", { class: "m-num" }, dur) : null)),
       link)));
@@ -669,6 +697,60 @@ async function unpublish(text, ok) {
   }
 }
 
+// --- Speicher und Archiv ------------------------------------------------------------------------
+function storageSection(ep) {
+  state.ui.storage = h("div", { class: "m-storage" });
+  const sec = section("speicher", ep.archived_at ? t("Rohdaten im Archiv") : t("Speicher"), state.ui.storage);
+  drawStorage();
+  return sec;
+}
+
+function drawStorage() {
+  const box = state.ui.storage;
+  const ep = state.ep;
+  if (!box) return;
+  clear(box);
+  const st = ep.storage || {};
+  const job = (ep.jobs || []).find((j) => j.kind === "restore" && (j.status === "running" || j.status === "queued"));
+  const failed = !job && (ep.jobs || []).find((j) => j.kind === "restore" && j.status === "failed");
+  if (ep.archived_at) {
+    box.append(h("p", null, t("Rohspuren, Zwischenstände und Mischungen liegen seit dem {date} im Archiv. Neu mischen und Neu verarbeiten brauchen sie, Rohspuren lassen sich erst nach dem Zurückholen laden.", { date: fmtDate(ep.archived_at) })),
+      h("p", { class: "tr-small m-num" }, t("Lokal belegt: {size}", { size: fmtBytes(st.local_bytes) })));
+    if (job) box.append(h("p", { class: "tr-small" }, job.status === "queued" ? t("Zurückholen wartet auf den Start") : t("{state}, {pct} %", { state: job.message || t("Rohdaten werden zurückgeholt"), pct: Math.round((job.progress || 0) * 100) })), progressBar(job.progress, t("Zurückholen, Fortschritt")));
+    else box.append(h("div", { class: "app-row" }, button(t("Zurückholen"), { icon: "download", onclick: restoreRaw })));
+    if (failed) box.append(h("p", { class: "tr-error", role: "alert" }, t("Zurückholen ist fehlgeschlagen. {message}", { message: failed.message || "" })));
+    return;
+  }
+  box.append(h("p", null, rich(t("Diese Folge belegt auf dem Server {size}"), { size: h("strong", { class: "m-num" }, fmtBytes(st.local_bytes)) })));
+  if (!st.archive_available) {
+    box.append(h("p", { class: "tr-small" }, t("Es ist kein Archiv eingerichtet. Mit der Umgebungsvariable PS_ARCHIVE_DIR lassen sich Rohdaten nach dem Veröffentlichen auslagern")));
+  } else if (ep.status === "published") {
+    const days = state.settings?.archive?.after_days;
+    box.append(h("p", { class: "tr-small" }, days > 0 ? t("Die Rohdaten wandern {n} Tage nach dem Veröffentlichen ins Archiv", { n: days }) : t("Die Rohdaten wandern gleich nach dem Veröffentlichen ins Archiv")));
+  } else {
+    box.append(h("p", { class: "tr-small" }, t("Nach dem Veröffentlichen wandern die Rohdaten nach Ablauf der Frist ins Archiv")));
+  }
+}
+
+async function restoreRaw() {
+  try {
+    await api(`/episodes/${encodeURIComponent(id)}/restore`, { method: "POST" });
+    await reload();
+  } catch (e) {
+    toast(errorText(e), { error: true });
+  }
+}
+
+// --- KI-Kosten -----------------------------------------------------------------------------------
+function costSection(ep) {
+  const c = ep.costs || { total: 0, by_kind: {} };
+  const rows = [[t("Recherche"), c.by_kind.research], [t("Live-Begleiter"), c.by_kind.companion], [t("Shownotes-Vorschlag"), c.by_kind.shownotes]];
+  const dl = h("dl", { class: "m-dl m-status-dl" });
+  rows.forEach(([k, v]) => dl.append(h("div", null, h("dt", null, k), h("dd", null, h("span", { class: "m-num" }, fmtUsd(v))))));
+  dl.append(h("div", null, h("dt", null, h("strong", null, t("Zusammen"))), h("dd", null, h("strong", { class: "m-num" }, fmtUsd(c.total)))));
+  return section("kosten", t("KI-Kosten dieser Folge"), dl, h("p", { class: "tr-small" }, t("Größenordnung aus den Preislisten der Dienste, auf Cent gerundet. Die Rechnung der Anbieter zählt")));
+}
+
 // --- Verwerfen und neu aufnehmen ----------------------------------------------------------------
 function discardSection(ep) {
   const run = async () => {
@@ -708,6 +790,52 @@ function deleteSection(ep) {
           toast(errorText(e), { error: true });
         }
       } })));
+}
+
+// --- Downloads (SPEC Abschnitt 15) ---------------------------------------------------------------
+/** Gesamtzahl, letzte 7 und 30 Tage und ein ruhiger Verlauf der letzten 30 Tage (Balken je Tag, eine Farbe). */
+function downloadsSection() {
+  const body = h("div", { class: "m-dl-body" }, h("p", { class: "tr-small" }, t("Wird geladen")));
+  api(`/episodes/${encodeURIComponent(id)}/downloads`).then((d) => {
+    clear(body);
+    if (d.mode === "off" && !d.total) {
+      body.append(h("p", { class: "tr-small" }, rich(t("Die Zählung ist aus. Sie lässt sich in den {settings} einschalten."), { settings: h("a", { href: "/settings#downloads" }, t("Einstellungen")) })));
+      return;
+    }
+    const dl = h("dl", { class: "m-dl m-status-dl" });
+    [[t("Gesamt"), d.total], [t("Letzte 7 Tage"), d.last7], [t("Letzte 30 Tage"), d.last30]]
+      .forEach(([k, v]) => dl.append(h("div", null, h("dt", null, k), h("dd", null, h("span", { class: "m-num" }, fmtInt(v))))));
+    body.append(dl, downloadsChart(d.days));
+    if (d.mode === "prefix") body.append(h("p", { class: "tr-small" }, t("Gezählt wird beim Zähldienst, nicht in dieser App. Hier stehen nur Abrufe aus der Zeit, als die App zählte.")));
+  }).catch((e) => { clear(body); body.append(h("p", { class: "tr-error", role: "alert" }, errorText(e))); });
+  return section("downloads", t("Downloads"), body);
+}
+
+function downloadsChart(days) {
+  const NS = "http://www.w3.org/2000/svg";
+  const W = 300, H = 72, gap = 2, bw = (W - gap * (days.length - 1)) / days.length;
+  const max = Math.max(1, ...days.map((x) => x.count));
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("class", "m-chart");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", t("Downloads je Tag in den letzten 30 Tagen, höchster Wert {n}", { n: fmtInt(max) }));
+  days.forEach((x, i) => {
+    const bar = document.createElementNS(NS, "rect");
+    const hgt = x.count ? Math.max(2, (x.count / max) * (H - 2)) : 1;
+    bar.setAttribute("x", String(i * (bw + gap)));
+    bar.setAttribute("y", String(H - hgt));
+    bar.setAttribute("width", String(bw));
+    bar.setAttribute("height", String(hgt));
+    bar.setAttribute("rx", "1");
+    bar.setAttribute("class", x.count ? "m-chart-bar" : "m-chart-zero");
+    const title = document.createElementNS(NS, "title");
+    title.textContent = `${fmtDate(Date.parse(x.day))}: ${fmtInt(x.count)}`;
+    bar.append(title);
+    svg.append(bar);
+  });
+  const axis = h("p", { class: "m-chart-axis tr-small m-num" }, h("span", null, fmtDate(Date.parse(days[0].day))), h("span", null, fmtDate(Date.parse(days[days.length - 1].day))));
+  return h("div", { class: "m-chart-wrap" }, svg, axis);
 }
 
 start();

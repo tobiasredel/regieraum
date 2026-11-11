@@ -228,6 +228,11 @@
 .m-ed-summary { margin: var(--space-1) 0 0; font-size: var(--fs-small); color: var(--slate); line-height: 1.6; }
 .m-ed-sel { color: var(--ink); }
 .m-ed-cuts { margin-top: var(--space-5); }
+.m-ed-notes { margin-top: var(--space-5); }
+.m-ed-notes .m-chap-list { margin-bottom: var(--space-2); }
+.m-note-label { flex: 1 1 200px; min-width: 0; line-height: 1.5; }
+.m-storage p { margin: 0 0 var(--space-2); }
+.m-storage .app-row { margin-top: var(--space-3); }
 .m-ed-cuts .tr-small { margin: 0 0 var(--space-2); }
 .m-ed-cutlist { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); }
 .m-ed-cutlist li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); padding: var(--space-2) var(--space-4); border-top: 1px solid var(--line); min-height: 52px; }
@@ -259,6 +264,18 @@
   .m-add .tr-input { flex: 1; min-width: 0; }
   .m-when-dt { margin-left: 0; }
 }
+
+/* Öffentliche Seite, Download-Zählung */
+.m-plat-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; gap: var(--space-2); align-items: end; margin-top: var(--space-3); }
+@media (max-width: 559px) { .m-plat-row { grid-template-columns: minmax(0, 1fr) auto; } .m-plat-row .m-field:nth-child(2) { grid-column: 1 / -1; grid-row: 2; } }
+.m-plat-row .m-field { margin-top: 0; }
+.m-plat-row .tr-btn { height: 44px; }
+.m-radio-desc { margin: 0 0 var(--space-3) 28px; }
+.m-chart-wrap { margin-top: var(--space-4); max-width: 640px; }
+.m-chart { display: block; width: 100%; height: auto; }
+.m-chart-bar { fill: var(--petrol); }
+.m-chart-zero { fill: var(--line); }
+.m-chart-axis { display: flex; justify-content: space-between; margin: var(--space-1) 0 0; }
 
 /* Druckansicht der Vorbereitung: eine saubere Seite je Sendung, ohne Bedienelemente */
 @media print {

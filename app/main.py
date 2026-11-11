@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket
 from fastapi.staticfiles import StaticFiles
 
-from . import api_host, api_p, core, errors, hostauth, jobs, pages, plan
+from . import api_host, api_p, core, downloads, errors, hostauth, jobs, pages, plan
 from .config import Config
 from .db import DB
 from .room import Room
@@ -57,6 +57,8 @@ def create_app(cfg: Config | None = None) -> FastAPI:
     app.include_router(api_p.router)
     app.include_router(api_host.router)
     app.include_router(plan.router)
+    app.include_router(downloads.router)
+    app.include_router(downloads.public)
     app.include_router(hostauth.router)
     app.include_router(pages.router)
     app.mount("/static", StaticFiles(directory=str(pages.STATIC_DIR), check_dir=False), name="static")

@@ -8,3 +8,11 @@ data
 tests/e2e/shots
 tests/e2e-manage/shots
 *.env
+.env
+.env.*
+.github
+.venv
+docker-compose.yml
+docs/screenshots
+**/shots
+*.log

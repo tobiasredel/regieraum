@@ -1,10 +1,12 @@
 # Regieraum – example for a single server. Copy to docker-compose.yml, create .env from .env.example, then:
-#   docker compose up -d --build
-# Put a reverse proxy with TLS in front (see README: WebSocket pass-through and Permissions-Policy).
+#   docker compose up -d
+# Put a reverse proxy with TLS in front (see docs/OPERATIONS.md: WebSocket pass-through and Permissions-Policy).
+# To pin a release instead of following latest, use e.g. ghcr.io/tobiasredel/regieraum:0.1
 services:
   regieraum:
-    build: .
-    image: regieraum:local
+    image: ghcr.io/tobiasredel/regieraum:latest
+    # To build from a clone of the repository instead of pulling the image:
+    # build: .
     container_name: regieraum
     init: true                # jobs run as subprocesses
     restart: unless-stopped

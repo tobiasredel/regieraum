@@ -90,6 +90,7 @@ models/                       Whisper-Modelle
 | `PS_STT_MODEL` | Transkriptionsmodell für die Live-Mitschrift (`gpt-transcribe` ist laut Anbieter-Doku 11/2026 das empfohlene Modell mit Begriffsliste; `gpt-4o-transcribe` ist abgekündigt zum 26.02.2027) | `gpt-transcribe` |
 | `PS_WHISPER_MODEL` | faster-whisper-Modell | `large-v3-turbo` |
 | `PS_NTFY_URL`, `PS_NTFY_USER`, `PS_NTFY_PASS` | Benachrichtigung, Standard-Topic `podcast` | leer = aus |
+| `PS_ARCHIVE_DIR` | Ordner im Container für archivierte Rohdaten (`/archive`, als Volume einbinden); leer = kein Archiv, nichts wird verschoben | leer |
 
 ### Show-Profil und Sendeformat (Einstellungen, Ergänzung 11.11.2026)
 
@@ -142,7 +143,7 @@ Zwei Sprachen sind unabhängig voneinander.
 
 ## 3. Zugang und Rollen
 
-Öffentlich sind `/join/`, `/api/join`, `/api/p/`, `/ws/p`, `/static/`, `/healthz`, `/public/` (bei Speicher `local`) sowie
+Öffentlich sind `/join/`, `/api/join`, `/api/p/`, `/ws/p`, `/static/`, `/healthz`, `/public/` (bei Speicher `local`), `/d/` (Download-Zählung und Weiterleitung auf die Audiodatei) sowie
 `/login` und `/logout`. Alles andere gehört dem Host: `/`, `/studio`, `/episodes`, `/sounds`, `/settings`, `/api/host/`
 und jeder neue Pfad. Wer den Host schützt, steuert `PS_HOST_AUTH`:
 
@@ -202,6 +203,8 @@ settings(key PK, value JSON)
   show: {title, author, owner_name, owner_email, description, language, category, subcategory, explicit,
          link, copyright, cover_key}
   audio: {target_lufs: -16, true_peak_db: -1.0, denoise: "normal", crossgate: true, mp3_kbps: 160}
+  site:  {enabled: true, platforms: [{name, url}]}            öffentliche Seite der Show (Abschnitt 10)
+  stats: {mode: "off" | "app" | "prefix", prefix: ""}         Download-Zählung (Abschnitt 10)
 invites(id PK, token UNIQUE, label, kind, created_at, expires_at, revoked_at)
 participants(id PK, token_hash UNIQUE, name, role, invite_id, created_at, last_seen_at)
 sounds(id PK, label, kind, chapter_title, ext, duration_ms, gain_db, fade_out_ms, sort, hotkey, archived, created_at)
@@ -245,7 +248,7 @@ Client → Server:
 | `rec.start`, `rec.pause`, `rec.resume`, `rec.stop` | – | Host |
 | `sound.play` | `sound_id` | Host |
 | `sound.stop` | `event_id`, `fade_ms` (Standard: `fade_out_ms` des Sounds) | Host |
-| `marker` | `label` | Host |
+| `marker` | `label`, `kind` (`note` Standard, oder `chapter`) | Host |
 
 Server → Client:
 
@@ -320,7 +323,7 @@ GET    /sounds            POST /sounds (multipart: file, label, kind, …)
 PATCH  /sounds/{id}       DELETE /sounds/{id}      POST /sounds/order {ids: [...]}
 GET    /sounds/{id}/audio
 GET    /invites           POST /invites {label, kind}        DELETE /invites/{id}
-GET    /settings          PUT /settings {show?, audio?}      POST /settings/cover (multipart, JPEG/PNG 1400–3000 px quadratisch)
+GET    /settings          PUT /settings {show?, audio?, site?, stats?}      POST /settings/cover (multipart, JPEG/PNG 1400–3000 px quadratisch)
 GET    /episodes          → Liste (ohne große Felder)
 GET    /episodes/{id}     → Folge mit tracks, events, jobs, report, ai, Kapitelvorschau
 PATCH  /episodes/{id}     {title?, number?, season?, summary?, description_html?, explicit?, episode_type?, edl?, chapter_titles?}
@@ -369,7 +372,7 @@ Zwei Seiten, ein gemeinsamer Kern: `/studio` (Host) und `/join/<token>` (Gast, z
   damit laufende Videos bei Raum-Updates nicht neu starten. Prüfung: `tests/e2e/stage.mjs`.
 - Jingles: Dateien beim Betreten vorladen und dekodieren, zur vereinbarten Serverzeit über Web Audio starten. Der Host
   hat das Soundboard mit Tasten 1–9, Restzeit je laufendem Sound und „Stopp mit Ausblenden“.
-- Sendemodus (Ergänzung 11.11.2026, nur Host, solange die Aufnahme läuft, ab 1100 × 600 px): Alles passt auf einen
+- Sendemodus (Ergänzung 11.11.2026, nur Host, solange die Aufnahme läuft, ab 1100 × 600 px; Tablet hochkant siehe unten): Alles passt auf einen
   Bildschirm, die Seite scrollt nicht. Kopf und Navigation der Seite sind ausgeblendet. Kopfzeile: Laufzeit, die
   Abschnitte des Sendeplans als Leiste (aktueller mit „seit m:ss“), Pause und Beenden. Darunter drei Spalten: links
   Bühne, Pegelzeile und Soundboard; in der Mitte der Begleiter mit festem Platz für Karten; rechts das Dossier des
@@ -381,15 +384,35 @@ Zwei Seiten, ein gemeinsamer Kern: `/studio` (Host) und `/join/<token>` (Gast, z
   einer Zeile am Ende). Was im Gespräch gefallen ist, wird durchgestrichen und trägt „gestellt“, „genannt“ oder
   „gebracht“: Der Begleiter meldet es mit `assist.said` (Abschnitt 15), ein Klick auf den Punkt schaltet von Hand um.
   Im Soundboard ist der Jingle markiert, dessen `segment_kind` zum nächsten unbesuchten Abschnitt passt. Nach dem
-  Beenden steht alles wieder in der gewohnten Ansicht. Unter 1100 px Breite bleibt die gewohnte Ansicht.
+  Beenden steht alles wieder in der gewohnten Ansicht. Sonst bleibt es unter 1100 px Breite bei der gewohnten Ansicht.
   Prüfung: `tests/e2e/live.mjs`.
 - Tasten beim Host (nicht in Eingabefeldern oder offenen Dialogen): `1` bis `9` Jingle, `←` und `→` Abschnitt
-  wechseln, `I` Impuls jetzt, `/` ins Nachschlagen-Feld, `M` Marker (nur während der Aufnahme). Jede Taste steht als
+  wechseln, `I` Impuls jetzt, `/` ins Nachschlagen-Feld, `M` Merkpunkt, `K` Kapitel (beide nur während der Aufnahme). Jede Taste steht als
   Tastenkappe neben ihrer Funktion.
-- Host-Leiste: Aufnahme starten, Pause, Weiter, Stopp (mit Rückfrage), Laufzeit, Marker setzen. Je Teilnehmer: Pegel
+- Host-Leiste: Aufnahme starten, Pause, Weiter, Stopp (mit Rückfrage), Laufzeit; im Soundboard-Bereich „Merkpunkt setzen“ und „Kapitel setzen“ mit gemeinsamem Feld für die Bezeichnung. Je Teilnehmer: Pegel
   (vom Client gemessen, nicht aus dem WebRTC-Ton), Übersteuerungswarnung, Kopfhörer-Status, Upload-Stand, Verbindungsgüte.
 - Nach Stopp: deutlicher Hinweis „Upload läuft, Fenster offen lassen“ mit Fortschritt, danach „Fertig, Fenster kann zu“.
-- Handy: Screen Wake Lock während der Aufnahme, Warnung beim Wechsel in den Hintergrund, Layout ab 360 px.
+- Merkpunkt und Kapitel (Ergänzung 11.11.2026): Zwei Arten von Marken. Ein **Merkpunkt** („hier war ein Versprecher“) ist
+  nur für den Schnitt und kommt nie in die fertige Folge; ein **Kapitel** wird in der Folge zum Kapitel. Ereignis
+  `kind: "marker"` mit `payload {label, kind}`: `payload.kind == "note"` ist ein Merkpunkt, alles andere (auch alte
+  Ereignisse ohne `payload.kind`) ein Kapitel. Ohne `kind` in der Nachricht gilt `note`; ein unbekannter Wert wird zu
+  `note` (der Zeitpunkt geht nicht verloren, und ein Merkpunkt ist die folgenlose Art). Die Rückmeldung nennt Art und
+  Zeit („Merkpunkt bei 12:34“, „Kapitel bei 12:34“).
+- Hörprobe im Gerätecheck (Host und Gast): fünf Sekunden vom gewählten Mikrofon mit den Einstellungen der Aufnahme
+  (Kopfhörer, Echounterdrückung), danach „Abspielen“ und „Noch einmal“. Rein lokal per MediaRecorder, nichts geht an
+  den Server. Mit dem Testsignal geht sie ebenso; ohne MediaRecorder ist sie ausgeblendet. Ein Satz nennt, worauf zu
+  achten ist (Hall, Rauschen, Abstand). Prüfung: `tests/e2e/probe.mjs`.
+- Handy und Tablet: Screen Wake Lock während der Aufnahme. Der Gerätecheck rät vorab, das Studio im Vordergrund zu
+  lassen, den Bildschirm nicht zu sperren und ein Ladekabel zu nutzen. Kommt die Seite aus dem Hintergrund zurück,
+  steht bei Host und Gast eine Warnung mit derselben Anweisung; auf Handy und Tablet bleibt sie stehen, bis sie
+  geschlossen wird. Layout ab 360 px.
+- Home-Bildschirm (iPhone, iPad, Android): `/app.webmanifest` (hinter der Host-Anmeldung, Name und Kurzname aus dem
+  Titel der Show, `display: standalone`, `start_url: /studio`, Symbole 192 und 512 px) und `apple-touch-icon`
+  (180 px) unter `app/static/icons/` (erzeugt von `scripts/make_icons.py`). Eingebunden nur auf Host-Seiten
+  (`crossorigin="use-credentials"`); die Gastseite `/join/…` und die Anmeldung bekommen kein Manifest.
+- Sendemodus auf dem Tablet hochkant (760 bis 1099 px Breite, mindestens 900 px Höhe, z. B. iPad 820 × 1180):
+  Kopfzeile, darunter zwei Spalten (links Gespräch und Soundboard, rechts Karten), darunter über die volle Breite das
+  Dossier; die Seite scrollt nicht. Darunter bleibt es bei der gewohnten Ansicht.
 - Browser: aktuelle Chrome, Edge, Firefox, Safari (macOS und iOS). Fehlt etwas Nötiges, sagt die Seite klar, was.
 
 ## 9. Audio-Pipeline (Paket C)
@@ -567,10 +590,47 @@ Start keine Folge, `rec.start` legt dann eine leere an. Jeder Start setzt die Wa
 trägt `preparations` und `prep_id`. Die Folgenliste zeigt Vorbereitungen nicht, sondern nennt nur ihre Zahl.
 Prüfung: `tests/e2e/preps.mjs`.
 
+Abschnitt in eine andere Vorbereitung (Ergänzung 11.11.2026): `POST /api/host/segments/{id}/transfer {target_episode_id,
+mode}` verschiebt (`move`) oder kopiert (`copy`) einen Abschnitt samt Eingabe, Notizen, Status und Dossier. Das Ziel muss
+eine andere Vorbereitung (`draft`) sein (422 `same_preparation`, `not_a_preparation`). Die Kopie bekommt eine neue ID und
+hängt hinten an, Verschieben hängt den Abschnitt hinten an und setzt `visited_at` zurück; die Quelle wird neu
+durchnummeriert. Läuft für den Abschnitt gerade eine Recherche, antwortet der Server mit 409 `researching`. Der Raum
+wird für Quelle und Ziel nachgeführt (`plan_changed`), sofern sie die Folge des Studios sind. Oberfläche: je Abschnitt der
+Knopf „In andere Vorbereitung“ (nur mit mindestens zwei Vorbereitungen) mit Dialog „Verschieben“ oder „Kopieren“.
+
 Show-Daten und Cover stehen im Feed. Deshalb bauen `PUT /settings` (mit `show`) und `POST /settings/cover` den Feed sofort
 neu, sobald mindestens eine Folge veröffentlicht ist (`publishing.refresh_feed`, lädt auch ein neues Cover hoch). Scheitert
 der Speicher, sind die Einstellungen gespeichert und die Antwort ist `502 storage`. Der Import legt das Cover zusätzlich
 unter `$PS_DATA/cover/` ab, weil Einstellungsseite und Verarbeitung es von dort lesen.
+
+Öffentliche Seite (Ergänzung 11.11.2026): Bei jedem Neubau des Feeds (`publishing.rebuild_feed`) entstehen im Speicher
+zusätzlich statische Seiten ohne JavaScript, CSS inline: `index.html` (Cover, Titel, Beschreibung, Links zu Podcast-Apps,
+Folgenliste neueste zuerst mit Datum, Dauer, Kurzbeschreibung und `<audio controls preload="none">`) und je Folge
+`folgen/<guid-slug>.html` (Titel, Datum, Player, Shownotes als bereinigtes HTML, Kapitel mit Zeiten aus `chapters.json`).
+Code: `publish/site.py`, Aufruf aus `release.publish_feed(…, site=SiteOptions)`. Farben: `app/static/design/tokens-unprefixed.css`
+wird zur Laufzeit gelesen, `--paper --surface --ink --slate --line --petrol` (hell aus `:root`, dunkel aus
+`[data-theme="dark"]` als `prefers-color-scheme`) landen als Variablen im Stylesheet der Seite; so trägt jede Installation
+ihr Thema. Sprache der Seite und `<html lang>` = `show.language`, Texte über `i18n.tr` (nicht übersetzbare Sprachen:
+Englisch). Unveränderte Seiten werden nicht erneut hochgeladen (Prüfsummen in `settings.site_pages`, gebunden an die
+Adresse des Speichers). Einstellungen `site = {enabled (Standard true), platforms}` (Name und http(s)-Adresse, höchstens 6;
+sonst 422); Abschalten löscht `index.html` und die Folgenseiten, Zurückziehen einer Folge ihre Seite. Der Feed-`link` (Show
+und Folgen ohne eigenen Link): Hat der Nutzer unter „Show“ eine Webseite gespeichert (anders als `PS_BASE_URL`, das die
+Einstellungsseite als Vorgabe zeigt), gilt sie. Sonst zeigt `link` auf `storage.url("index.html")` und der `link` je Folge
+auf ihre Seite, solange die Seite an ist; ist sie aus, bleibt es bei `PS_BASE_URL`. Die Einstellungen nennen die Adresse
+immer mit `index.html`, weil manche S3-Speicher (R2) unter `/` nichts ausliefern.
+
+Downloads zählen (Ergänzung 11.11.2026, Migration 5, Tabelle `downloads(day, episode_id, visitor)`, Primärschlüssel über
+alle drei): Einstellung `stats = {mode, prefix}`. `off` (Standard): Enclosures zeigen auf den Speicher. `app`: Enclosure-URLs
+in Feed und Seite lauten `<PS_BASE_URL>/d/<audio_key>`; die öffentliche Route `GET|HEAD /d/{key}` (`app/downloads.py`) zählt
+und leitet mit 302 (`Cache-Control: no-store`) auf `<PS_PUBLIC_BASE_URL>/<key>` weiter, unbekannte oder nicht
+veröffentlichte Schlüssel ergeben 404. `prefix`: vor die Speicheradresse der Audiodatei kommt das Präfix eines
+Zähldienstes (`https://op3.dev/e/`), gezählt wird dort. Betroffen sind nur Audiodateien (`release.enclosure_url_fn`,
+`build_feed(enclosure_url=…)`), nicht Cover, Kapitel oder Transkript. Datensparsam: keine IP gespeichert, nur
+`visitor = sha256(salt + ip + user_agent + tag)[:16]` mit zufälligem Salz in `$PS_DATA/stats_salt`; je Tag und Folge zählt ein
+Besucher einmal. Gezählt wird nur `GET` (nicht `HEAD`), ohne `Range` oder mit `Range` ab Byte 0, und nicht bei bekannten
+Bots (einfache Liste im User-Agent). Tag = UTC. Auswertung: `GET /api/host/stats/downloads` → `{mode, totals}`,
+`GET /api/host/episodes/{id}/downloads` → `{mode, total, last7, last30, days: [30 × {day, count}]}`; Folgenliste zeigt
+„n Downloads“, Folgenseite Gesamt, 7 und 30 Tage und einen Balkenverlauf.
 
 Umzug `local` → `s3` (Ergänzung 11.11.2026): `publish.transfer.transfer_tree(root, target, *, dry_run=False,
 on_progress=None) -> TransferResult` lädt alles aus `$PS_DATA/public` unter gleichem Schlüssel in den Zielspeicher
@@ -695,6 +755,7 @@ POST   /api/host/episodes/{id}/segments {kind, title?, input?, good_type?}
 PATCH  /api/host/segments/{id} {title?, input?, good_type?, notes?, sort?}
 DELETE /api/host/segments/{id}
 POST   /api/host/segments/{id}/research           startet oder wiederholt die Recherche
+POST   /api/host/segments/{id}/transfer {target_episode_id, mode: "move" | "copy"}   → Abschnitt (siehe „Abschnitt in eine andere Vorbereitung“)
 POST   /api/host/episodes/{id}/segments/order {ids: [...]}
 POST   /api/host/episodes/draft                   liefert die aktuelle Folge im Zustand draft und legt sie bei Bedarf
                                                   samt Standardplan an → {episode}
@@ -829,7 +890,7 @@ Festlegungen, die beim Bau des Servers nötig waren. Sie ergänzen die Abschnitt
   `pauses[].to` ist `null`, solange die Pause läuft. `peers` enthält auch getrennte Teilnehmer, die in der aktuellen
   Folge eine Spur haben (`connected: false`). `active_sounds[]` hat zusätzlich `preview` (bool, Vorhören).
 - Zusätzliche WebSocket-Nachrichten: Client → Server `track.recorded {track_id, recorded_frames}` (aufgenommene Frames
-  der eigenen Spur, für die Fortschrittsanzeige); Server → Client `marker {label, at}` (`at` in Sitzungszeit).
+  der eigenen Spur, für die Fortschrittsanzeige); Server → Client `marker {label, kind, at}` (`at` in Sitzungszeit).
   `track.progress` kommt nach jedem Chunk, `finish` und `track.recorded`. Unbekannte Typen liefern `error`.
   Beim Verbindungsaufbau mit ungültigem Token oder vollem Raum kommt zuerst eine `error`-Nachricht
   (`unauthorized` bzw. `room_full`), danach schließt der Server mit Code 4401 bzw. 4429. Verbindet sich dieselbe Identität
@@ -919,3 +980,27 @@ Festlegungen, die beim Bau des Servers nötig waren. Sie ergänzen die Abschnitt
 - `dev.sh serve` reicht `PS_JOBS` (Standard 1) und, wenn gesetzt, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `PS_STT_MODEL`, `PS_AI_MODEL`,
   `PS_AI_MODEL_PREP`, `PS_AI_MODEL_LIVE` aus der Umgebung durch. `dev.sh serve-e2e [port]` ist `serve` ohne `--reload` und mit
   `PS_JOBS` Standard 0 für Browser-Tests.
+
+### Merkpunkte, Archiv und Kosten (Nachbearbeitung und Betrieb, 11.11.2026)
+
+- Merkpunkte statt Kapitel: Ein Ereignis `marker` mit `payload.kind == "note"` ist ein Merkpunkt (Taste `M` im Studio), jedes
+  andere (`payload.kind == "chapter"`, Taste `K`, und alte Ereignisse ohne `kind`) ist ein Kapitel. Kapitelvorschau, `chapters.json`
+  und Feed enthalten nur Kapitel. Das Manifest hat `markers` (nur Kapitel) und `notes: [{at_ms, label}]` (Sitzungszeit; die
+  Pipeline ignoriert sie, auch ein verirrter Merkpunkt in `markers` setzt kein Kapitel). `GET /episodes/{id}` liefert
+  `notes: [{event_id, session_ms, label}]` (leere Bezeichnung: „Merkpunkt“). Der Schnitt-Editor zeigt sie als Fähnchen in
+  Sand und als Liste „Merkpunkte“; ein Klick springt 2 Sekunden vor den Punkt.
+- Archiv: Mit `PS_ARCHIVE_DIR` und der Einstellung `archive = {after_days}` (Standard 14, 0 = sofort; `GET/PUT /settings` führt
+  zusätzlich `archive.available`) reiht der Zeitgeber (`tick`) für veröffentlichte, selbst aufgenommene Folgen nach Ablauf der
+  Frist den Job `archive` ein. Der Job kopiert das Folgenverzeichnis bis auf `out/` nach `<PS_ARCHIVE_DIR>/<guid>/`
+  (zuerst in `<guid>.partial`), prüft Dateien und Größen, setzt `episodes.archived_at` und `archive_path` und löscht erst dann
+  lokal. Nach einem Fehlschlag gibt es sechs Stunden Ruhe. Folgen in der Prüfung, Importe und Entwürfe werden nie archiviert;
+  ohne Archiv passiert nichts. Solange `archived_at` gesetzt ist, antworten `remix`, `process` und der Rohspur-Download mit
+  409 `archived`. `POST /episodes/{id}/restore` (Job `restore`) kopiert zurück, löscht `archived_at` und die Archivkopie.
+  Löschen und Verwerfen entfernen auch die Archivkopie. `GET /episodes/{id}` hat `storage: {local_bytes, archived,
+  archive_available}`, `GET /status` hat `archive: {configured, episodes_bytes, archive_bytes, archive_free_bytes}`.
+- Kosten: Tabelle `costs(id, episode_id, segment_id, kind, usd, created_at)`, `kind` = `research | companion | shownotes`
+  (Migration 4). Die Recherche schreibt nach jedem Dossier (`dossier.meta.kosten_usd`, mit `segment_id`), der Live-Begleiter
+  beim Schließen der Sitzung (Mitschrift plus Hinweise aus `summary_stats()`), der Shownotes-Vorschlag nach jedem Aufruf
+  (`shownotes.suggest` liefert dazu `cost_usd`, das der Server herauslöst). Anzeige: `GET /episodes/{id}` hat `costs: {total,
+  by_kind}`, Abschnitte haben `cost_usd`, `GET /status` hat `costs: {current, previous}` (je `{month, total, by_kind}`, UTC).
+  Beträge sind Größenordnungen aus den Preislisten, auf Cent gerundet angezeigt.

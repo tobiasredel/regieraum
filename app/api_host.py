@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import hashlib
+import re
 import shutil
 from pathlib import Path
 from typing import Literal
@@ -12,7 +13,7 @@ from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 
-from . import core, cover, i18n, jobs, publishing, soundproc, util
+from . import archive, core, cover, i18n, jobs, publishing, soundproc, util
 from .api_p import serve_sound
 from .auth import host_guard
 from .errors import ApiError
@@ -262,18 +263,43 @@ class FormatPatch(BaseModel):
         default=None, min_length=1, max_length=12)
 
 
+class ArchivePatch(BaseModel):
+    """Rohdaten ins Archiv, so viele Tage nach dem Veröffentlichen (0 = sofort). Wirkt nur mit `PS_ARCHIVE_DIR`."""
+    after_days: int | None = Field(default=None, ge=0, le=3650)
+
+
 class UiPatch(BaseModel):
     """Sprache der Oberfläche dieser Installation."""
     language: Literal["de", "en"] | None = None
 
 
+class PlatformItem(BaseModel):
+    name: str = Field(max_length=60)
+    url: str = Field(max_length=500)
+
+
+class SitePatch(BaseModel):
+    """Öffentliche Seite der Show: an/aus und Links zu Podcast-Apps (höchstens 6)."""
+    enabled: bool | None = None
+    platforms: list[PlatformItem] | None = Field(default=None, max_length=core.MAX_PLATFORMS)
+
+
+class StatsPatch(BaseModel):
+    """Download-Zählung: Modus und Präfix des Zähldienstes (nur für `prefix`, https)."""
+    mode: Literal["off", "app", "prefix"] | None = None
+    prefix: str | None = Field(default=None, max_length=300)
+
+
 class SettingsPatch(BaseModel):
     show: ShowPatch | None = None
+    site: SitePatch | None = None
+    stats: StatsPatch | None = None
     audio: AudioPatch | None = None
     assist: AssistPatch | None = None
     profile: ProfilePatch | None = None
     format: FormatPatch | None = None
     ui: UiPatch | None = None
+    archive: ArchivePatch | None = None
 
 
 async def _refresh_feed(st) -> None:
@@ -302,6 +328,9 @@ async def settings_put(body: SettingsPatch, request: Request) -> dict:
         st.db.set_setting("show", merged)
     if body.audio:
         st.db.set_setting("audio", {**cur["audio"], **body.audio.model_dump(exclude_unset=True, exclude_none=True)})
+    if body.archive:
+        st.db.set_setting("archive", {**{k: v for k, v in cur["archive"].items() if k != "available"},
+                                      **body.archive.model_dump(exclude_unset=True, exclude_none=True)})
     if body.ui and body.ui.language:
         st.db.set_setting("ui", {"language": body.ui.language})
     if body.profile:
@@ -317,9 +346,39 @@ async def settings_put(body: SettingsPatch, request: Request) -> dict:
         await _room_update(request)
     if body.assist and body.assist.enabled is not None:
         await st.room.companion.set_enabled(body.assist.enabled)
-    if body.show:
+    site_changed = await _site_and_stats_put(body, st, cur)
+    if body.show or site_changed:
         await _refresh_feed(st)
     return core.get_settings(st.db, st.cfg)
+
+
+async def _site_and_stats_put(body: SettingsPatch, st, cur: dict) -> bool:
+    """Öffentliche Seite und Download-Zählung speichern. -> True, wenn der Feed neu gebaut werden muss."""
+    changed = False
+    if body.site:
+        patch = body.site.model_dump(exclude_unset=True, exclude_none=True)
+        if "platforms" in patch:
+            given = len(patch["platforms"])
+            patch["platforms"] = core.clean_platforms(patch["platforms"])
+            if len(patch["platforms"]) != given:
+                raise ApiError(422, "invalid", "Jeder Link braucht einen Namen und eine Adresse mit https:// oder http://")
+        new = {**cur["site"], **patch}
+        st.db.set_setting("site", new)
+        changed = True
+        if cur["site"]["enabled"] and not new["enabled"]:
+            try:
+                await asyncio.to_thread(publishing.remove_site, st.db, st.cfg)
+            except Exception as exc:  # noqa: BLE001 - Speicher nicht erreichbar: die Einstellung gilt trotzdem
+                raise ApiError(502, "storage", "Gespeichert, aber die Seite ließ sich nicht entfernen: {detail}", detail=exc) from exc
+    if body.stats:
+        patch = body.stats.model_dump(exclude_unset=True, exclude_none=True)
+        new = {**cur["stats"], **patch}
+        new["prefix"] = new["prefix"].strip()
+        if new["mode"] == "prefix" and not re.fullmatch(r"https://[^\s<>\"']+", new["prefix"]):
+            raise ApiError(422, "invalid", "Das Präfix des Zähldienstes muss mit https:// beginnen")
+        st.db.set_setting("stats", new)
+        changed = True
+    return changed
 
 
 @router.post("/settings/cover")
@@ -411,6 +470,10 @@ def episode_get(episode_id: str, request: Request) -> dict:
     out["jobs"] = [jobs.job_public(j, with_log=False, lang=i18n.ui_lang(st.db)) for j in
                    st.db.all("SELECT * FROM jobs WHERE episode_id=? ORDER BY created_at DESC LIMIT 10", (episode_id,))]
     out["chapters_preview"] = core.chapters_preview(st.db, ep)
+    out["notes"] = core.notes_of(st.db, ep)  # Merkpunkte für den Schnitt, Zeit in Sitzungszeit
+    out["costs"] = core.costs_of(st.db, episode_id)
+    out["storage"] = {"local_bytes": archive.dir_bytes(st.cfg.episode_dir(episode_id)), "archived": bool(ep["archived_at"]),
+                      "archive_available": st.cfg.archive_dir is not None}
     out["files"] = _files(st.cfg, episode_id)
     if isinstance(out.get("report"), dict) and out["report"].get("warnings"):  # Warnungen der Pipeline stehen deutsch in der Datenbank
         lang = i18n.ui_lang(st.db)
@@ -492,6 +555,7 @@ async def episode_delete(episode_id: str, request: Request) -> dict:
             c.execute(f"DELETE FROM {table} WHERE episode_id=?", (episode_id,))
         c.execute("DELETE FROM episodes WHERE id=?", (episode_id,))
     shutil.rmtree(st.cfg.episode_dir(episode_id), ignore_errors=True)
+    archive.remove_copy(ep)
     await _room_update(request)
     return {"deleted": True}
 
@@ -517,6 +581,7 @@ async def episode_discard(episode_id: str, request: Request) -> dict:
     finally:
         runner.release_cancel(episode_id)
     shutil.rmtree(st.cfg.episode_dir(episode_id), ignore_errors=True)
+    archive.remove_copy(ep)
     await st.room.broadcast({"type": "rec.discard", "episode_id": episode_id})
     await _room_update(request)
     return {"discarded": True, "episode_id": target}
@@ -572,6 +637,22 @@ def _job_response(request: Request, job_id: str) -> dict:
     return {"job_id": job_id}
 
 
+def _not_archived(ep: dict) -> None:
+    if ep["archived_at"]:
+        raise ApiError(409, "archived", "Die Rohdaten liegen im Archiv. Bitte zuerst zurückholen")
+
+
+@router.post("/episodes/{episode_id}/restore")
+def episode_restore(episode_id: str, request: Request) -> dict:
+    """Rohdaten aus dem Archiv zurückholen (Job), damit Neu mischen und Neu verarbeiten wieder gehen."""
+    ep = _episode_or_404(request, episode_id)
+    if not ep["archived_at"]:
+        raise ApiError(409, "not_archived", "Die Rohdaten dieser Folge liegen nicht im Archiv")
+    if not ep["archive_path"] or not Path(ep["archive_path"]).is_dir():
+        raise ApiError(409, "archive_unreachable", "Das Archiv ist nicht erreichbar")
+    return _job_response(request, jobs.enqueue(_st(request).db, episode_id, "restore"))
+
+
 @router.post("/episodes/{episode_id}/process")
 def episode_process(episode_id: str, request: Request) -> dict:
     ep = _episode_or_404(request, episode_id)
@@ -579,6 +660,7 @@ def episode_process(episode_id: str, request: Request) -> dict:
         raise ApiError(409, "bad_state", "Verarbeiten geht nur nach der Aufnahme, in der Prüfung oder nach einem Fehler")
     if ep["rec_start_server_ms"] is None:
         raise ApiError(409, "no_recording", "Die Folge hat keine Aufnahme")
+    _not_archived(ep)
     return _job_response(request, jobs.start_processing(_st(request).db, episode_id))
 
 
@@ -588,6 +670,7 @@ def episode_remix(episode_id: str, request: Request) -> dict:
     ep = _episode_or_404(request, episode_id)
     if ep["status"] not in ("review", "failed") or ep["source"] != "recorded":
         raise ApiError(409, "bad_state", "Neu mischen geht nur in der Prüfung")
+    _not_archived(ep)
     if not (st.cfg.episode_dir(episode_id) / "work" / "stems").exists():
         raise ApiError(409, "no_stems", "Es gibt noch keine Zwischenstände. Bitte die Verarbeitung komplett neu starten")
     core.update_episode(st.db, episode_id, status="processing")
@@ -690,11 +773,13 @@ def episode_transcript(episode_id: str, request: Request):
 @router.get("/episodes/{episode_id}/tracks/{track_id}/raw")
 def episode_raw(episode_id: str, track_id: str, request: Request):
     st = _st(request)
-    _episode_or_404(request, episode_id)
+    ep = _episode_or_404(request, episode_id)
     t = st.db.one("SELECT * FROM tracks WHERE id=? AND episode_id=?", (track_id, episode_id))
     if t is None:
         raise ApiError(404, "track_not_found", "Spur nicht gefunden")
     path = st.cfg.episode_dir(episode_id) / "tracks" / track_id / "raw.flac"
+    if not path.exists() and ep["archived_at"]:
+        _not_archived(ep)
     if not path.exists():
         raise ApiError(404, "not_found", "Die Rohspur ist noch nicht zusammengesetzt")
     name = f"{util.slugify(t['participant_name'])}-{track_id}.flac"
@@ -749,4 +834,6 @@ def status(request: Request) -> dict:
         "assist": _st(request).room.companion.status_summary(),
         "whisper": {"model": cfg.whisper_model, "downloaded": models.exists() and any(models.iterdir())},
         "disk_free_bytes": shutil.disk_usage(cfg.data).free,
+        "archive": archive.totals(cfg),
+        "costs": core.month_costs(_st(request).db),
     }

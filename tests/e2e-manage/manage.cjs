@@ -55,6 +55,16 @@ const wav = () => { // 1 s Sinus als WAV
   // Tastatur: Pfeil rechts
   await page.keyboard.press("ArrowRight");
   L.ok(/0:45|0:44|0:46/.test(await page.textContent(".m-ed-time")), "Pfeil rechts springt 5 Sekunden");
+  // Merkpunkte: eigene Liste beim Schnitt, keine Kapitel; Klick springt 2 s vor den Punkt
+  const folge = (await L.api(page, `/episodes/${L.REVIEW}`)).body;
+  L.ok(folge.notes.length === 2 && folge.notes[0].label === "Aussetzer prüfen" && folge.notes[0].session_ms === 41000, "Folge liefert die Merkpunkte in Sitzungszeit");
+  L.ok(!folge.chapters_preview.some((c) => /Aussetzer|Zahl nachschlagen/.test(c.title)), "Merkpunkte sind keine Kapitel");
+  L.ok((await page.locator(".m-notes li").count()) === 2 && (await page.textContent(".m-ed-notes h3")) === "Merkpunkte", "Liste Merkpunkte zeigt beide Einträge");
+  await page.locator(".m-notes li").nth(1).locator("button").click();
+  L.ok(/1:5[5-9]/.test(await page.textContent(".m-ed-time")), "Klick auf den Merkpunkt (1:58) setzt die Wiedergabe 2 Sekunden davor");
+  const flags = await page.evaluate(() => { const c = document.querySelector(".m-ed-main"); const x = c.getContext("2d"); const w = c.width, h = c.height; const d = x.getImageData(0, 0, w, h).data; let sand = 0; for (let i = 0; i < d.length; i += 4) if (Math.abs(d[i] - 0xA8) < 6 && Math.abs(d[i + 1] - 0x89) < 6 && Math.abs(d[i + 2] - 0x4A) < 6) sand++; return sand; });
+  L.ok(flags > 20, `Fähnchen der Merkpunkte stehen in Sand in der Wellenform (${flags} Bildpunkte)`);
+  await refresh();
   // Zoom
   await page.click("button[aria-label='Vergrößern']");
   await page.click("button:has-text('Alles')");
@@ -146,7 +156,38 @@ const wav = () => { // 1 s Sinus als WAV
   await page.waitForTimeout(800);
   L.ok((await page.textContent("#feed pre")).length > 20, "Feed-Vorschau geladen");
   L.ok((await page.textContent("#m-status")).includes("Freier Speicherplatz"), "Systemstatus als Text");
+  const statusText = await page.textContent("#m-status");
+  L.ok(statusText.includes("KI-Kosten im laufenden Monat") && statusText.includes("KI-Kosten im Vormonat") && statusText.includes("Belegt von allen Folgen"), "Systemstatus zeigt KI-Kosten beider Monate und den Speicherbedarf");
+  const archivOn = (await L.api(page, "/status")).body.archive.configured;
+  L.ok(archivOn ? statusText.includes("frei") : statusText.includes("PS_ARCHIVE_DIR"), archivOn ? "Systemstatus zeigt Archiv mit freiem Platz" : "Systemstatus weist ohne Archiv auf PS_ARCHIVE_DIR hin");
+  L.ok(archivOn ? !(await page.isDisabled("#m-arch-days")) : await page.isDisabled("#m-arch-days"), archivOn ? "Frist im Abschnitt Archiv ist bearbeitbar" : "Frist ist ohne Archiv ausgegraut");
+  if (!archivOn) L.ok((await page.textContent("#archiv")).includes("PS_ARCHIVE_DIR"), "Hinweis auf PS_ARCHIVE_DIR im Abschnitt Archiv");
   L.ok(page.problems.filter((p) => !p.includes("feed/preview") && !/HTTP (409|404)/.test(p)).length === 0, `keine Konsolenfehler ${page.problems}`);
+
+  console.log("Kosten und Speicher der Folge");
+  await page.goto(`${L.BASE}/episodes/${L.REVIEW}`);
+  await page.waitForSelector("#kosten");
+  const kosten = await page.textContent("#kosten");
+  L.ok(kosten.includes("0,68 $") && kosten.includes("0,92 $") && kosten.includes("0,06 $") && kosten.includes("1,66 $"), `KI-Kosten dieser Folge nach Art und zusammen (${kosten.replace(/\s+/g, " ").slice(0, 120)})`);
+  L.ok((await page.textContent("#speicher")).includes("belegt auf dem Server"), "Folgenseite zeigt den lokalen Speicherbedarf");
+  if (archivOn) {
+    await page.goto(`${L.BASE}/episodes/demoep-pub`);
+    await page.waitForSelector("#speicher");
+    L.ok((await page.textContent("#speicher")).includes("14 Tage nach dem Veröffentlichen"), "Folge zeigt die Frist bis zur Archivierung");
+    L.ok((await L.api(page, "/settings", { method: "PUT", json: { archive: { after_days: 0 } } })).status === 200, "Frist 0 gesetzt");
+    let archived = false;
+    for (let i = 0; i < 40 && !archived; i++) { await page.waitForTimeout(1500); archived = !!(await L.api(page, "/episodes/demoep-pub")).body.archived_at; }
+    L.ok(archived, "Job-Läufer verschiebt die Rohdaten der veröffentlichten Folge ins Archiv");
+    await page.reload();
+    await page.waitForSelector("#speicher");
+    L.ok((await page.textContent("#speicher-h")) === "Rohdaten im Archiv" && await page.locator("#speicher button:has-text('Zurückholen')").count() === 1, "Abschnitt Rohdaten im Archiv mit Knopf Zurückholen");
+    L.ok((await page.textContent("#spuren")).includes("Im Archiv"), "Rohspuren-Liste zeigt „Im Archiv“ statt Download");
+    await page.click("#speicher button:has-text('Zurückholen')");
+    await page.waitForFunction(() => document.querySelector("#speicher-h")?.textContent === "Speicher", null, { timeout: 40000 }).catch(() => {});
+    const back = (await L.api(page, "/episodes/demoep-pub")).body;
+    L.ok(back.archived_at === null && back.tracks[0].has_raw === true, "Zurückholen holt die Rohspuren zurück und löscht archived_at");
+    await L.api(page, "/settings", { method: "PUT", json: { archive: { after_days: 14 } } });
+  } else console.log("  (Archiv-Ablauf übersprungen: PS_ARCHIVE_DIR nicht gesetzt)");
 
   console.log("Plan");
   const pp = await L.newPage(b, { allow: ["segments", "draft"] });
@@ -161,6 +202,9 @@ const wav = () => { // 1 s Sinus als WAV
   await pp.waitForSelector("#seg-seg2 :text('Recherche läuft')");
   await pp.waitForSelector("#seg-seg2 details.m-dossier", { timeout: 15000 });
   L.ok(true, "Recherche läuft und liefert ein Dossier");
+  L.ok((await pp.textContent("#seg-seg0 .m-seg-status")).includes("0,41 $"), "Abschnitt mit fertiger Recherche zeigt die Kosten (0,41 $)");
+  L.ok((await pp.textContent("#seg-seg2 .m-seg-status")).includes("0,27 $"), "neue Recherche zeigt ihre Kosten (0,27 $)");
+  L.ok(!(await pp.textContent("#seg-seg1 .m-seg-status")).includes("$"), "Abschnitt ohne Recherche zeigt keine Kosten");
   await pp.click("#seg-seg4 button:has-text('Übernehmen') >> nth=0");
   await pp.waitForFunction(() => document.querySelector("#seg-seg4-title").value === "Das Schloss", null, { timeout: 5000 }).catch(() => {});
   L.ok((await pp.inputValue("#seg-seg4-title")) === "Das Schloss", "Kandidat übernommen");

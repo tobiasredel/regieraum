@@ -18,6 +18,7 @@ export class CutEditor {
    * @param {object} o.peaks           {sample_rate, samples_per_peak, peaks: [min, max, ...]}
    * @param {object} o.edl             gespeicherte Schnittliste
    * @param {Array}  o.lines           [{ms, label, kind: "chapter" | "sound"}]
+   * @param {Array}  o.notes           [{ms, label}] Merkpunkte (nur für den Schnitt, als Fähnchen), Sitzungszeit
    * @param {Array}  o.pauses          [{from_ms, to_ms}] Pausen aus den Ereignissen (nur zur Beschriftung)
    * @param {Function} o.onChange      (edl, dirty) => void
    */
@@ -36,6 +37,7 @@ export class CutEditor {
     this.saved = JSON.stringify(this.edl);
     this.history = [];
     this.lines = (o.lines || []).filter((l) => l.ms >= 0 && l.ms <= this.total + 5000).sort((a, b) => a.ms - b.ms);
+    this.notes = (o.notes || []).filter((n) => n.ms >= 0 && n.ms <= this.total + 5000).sort((a, b) => a.ms - b.ms);
     this.pauses = o.pauses || [];
     this.view = { start: 0, pps: 1 };
     this.pos = 0;
@@ -180,7 +182,7 @@ export class CutEditor {
       // Farben kommen aus dem Thema; die Ersatzwerte greifen nur, wenn eine Variable fehlt
       ink: css("--ink") || "#111827", slate: css("--slate") || "#4B5565", line: css("--line") || "#DDE1E8",
       paper: css("--paper") || "#F5F7FA", surface: css("--surface") || "#FFFFFF", tint: css("--petrol-tint") || "#E8EDFB",
-      muted: css("--muted") || "#6B7487",
+      muted: css("--muted") || "#6B7487", sand: css("--sand") || "#A8894A",
     };
     this.hatch = this._pattern();
     this._clampView();
@@ -249,6 +251,12 @@ export class CutEditor {
     this.view.start = centered ? ms - this.visibleMs / 2 : ms;
     this._clampView();
     this.draw();
+  }
+
+  /** Springt zu einem Merkpunkt: Ansicht dorthin, Abspielposition 2 Sekunden davor. */
+  seekNote(ms) {
+    this.scrollTo(ms);
+    this.seek(Math.max(0, ms - 2000));
   }
 
   /** Zeigt den Bereich [from, to] so, dass er mit Rand sichtbar ist. */
@@ -350,6 +358,7 @@ export class CutEditor {
     if (xe < w) ctx.fillRect(Math.max(0, xe), top - 4, w - Math.max(0, xe), bottom - top + 8);
 
     this._drawLines(ctx, top, bottom);
+    this._drawNotes(ctx, top);
     this._drawRuler(ctx, bottom);
 
     // Beginnmarke
@@ -463,6 +472,33 @@ export class CutEditor {
         rightBot = this._label(ctx, text, x + 3, bottom - 9, c.slate);
       }
       void tw;
+    }
+  }
+
+  /** Merkpunkte als kleine Fähnchen in Sand: kurzer Schaft, Wimpel, Name in Grau. Ruhig, damit sie neben den
+   * durchgezogenen Kapitelmarken (Tinte) und den gestrichelten Sounds nicht um Aufmerksamkeit konkurrieren. */
+  _drawNotes(ctx, top) {
+    const c = this.colors;
+    let right = -1e9;
+    for (const n of this.notes) {
+      const x = Math.round(this.ms2x(n.ms)) + 0.5;
+      if (x < -2 || x > this.w + 2) continue;
+      const y0 = top + 4;
+      ctx.strokeStyle = c.sand;
+      ctx.fillStyle = c.sand;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x, y0);
+      ctx.lineTo(x, y0 + 22);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x, y0);
+      ctx.lineTo(x + 10, y0 + 4);
+      ctx.lineTo(x, y0 + 8);
+      ctx.closePath();
+      ctx.fill();
+      const text = n.label.length > 24 ? n.label.slice(0, 23) + "…" : n.label;
+      if (x + 14 > right) right = this._label(ctx, text, x + 14, y0 + 4, c.slate);
     }
   }
 

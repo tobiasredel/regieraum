@@ -49,6 +49,39 @@ async function main() {
   await p.click("dialog[open] button.m-danger, dialog[open] button:has-text('Löschen')");
   await p.waitForFunction((n) => document.querySelectorAll("#m-prep option").length === n, 2);
   check(!(await api("GET", "/api/host/preparations")).preparations.some((x) => x.id === c), "Vorbereitung gelöscht");
+  // Abschnitt in eine andere Vorbereitung kopieren und verschieben
+  await p.selectOption("#m-prep", a.id);
+  await p.waitForFunction(() => document.querySelector("#m-prep-label").value === "Woche 46, Bahn");
+  await p.waitForFunction(() => document.querySelectorAll(".m-seg").length === 5);
+  await p.fill("textarea >> nth=1", "Notiz zum Streik"); // Notizen des ersten Abschnitts
+  await p.waitForFunction(() => /Gespeichert|Saved/.test(document.querySelector(".m-seg .m-save-state").textContent), null, { timeout: 5000 });
+  const transferBtn = p.locator(".m-seg >> nth=0").getByRole("button", { name: /in andere Vorbereitung/i });
+  check(await transferBtn.count() === 1, "Knopf „In andere Vorbereitung“ je Abschnitt (zwei Vorbereitungen)");
+  await transferBtn.click();
+  await p.waitForSelector("dialog[open] #m-transfer-target");
+  const targets = await p.$$eval("#m-transfer-target option", (os) => os.map((o) => o.textContent));
+  check(targets.length === 1 && /Sonderfolge Wahl/.test(targets[0]), `Dialog bietet nur die andere Vorbereitung an (${targets.join(" | ")})`);
+  await p.screenshot({ path: path.join(SHOTS, "preps-transfer-dialog-1280.png") });
+  await p.click("dialog[open] button:has-text('Kopieren')");
+  await p.waitForSelector(".tr-toast >> text=kopiert");
+  let bsegs = await api("GET", `/api/host/episodes/${b.id}/segments`);
+  let copied = bsegs.find((x) => x.title === "Bahnstreik");
+  check(bsegs.length === 6 && copied && copied.notes === "Notiz zum Streik" && copied.sort === 5, "Kopie hängt hinten an der Ziel-Vorbereitung an, mit Notizen");
+  check((await api("GET", `/api/host/episodes/${a.id}/segments`)).length === 5 && (await p.locator(".m-seg").count()) === 5, "die Quelle behält den Abschnitt beim Kopieren");
+  await p.locator(".m-seg >> nth=0").getByRole("button", { name: /in andere Vorbereitung/i }).click();
+  await p.waitForSelector("dialog[open] #m-transfer-target");
+  await p.click("dialog[open] button:has-text('Verschieben')");
+  await p.waitForSelector(".tr-toast >> text=verschoben");
+  await p.waitForFunction(() => document.querySelectorAll(".m-seg").length === 4);
+  bsegs = await api("GET", `/api/host/episodes/${b.id}/segments`);
+  check(bsegs.length === 7 && bsegs.filter((x) => x.title === "Bahnstreik").length === 2, "Verschieben nimmt den Abschnitt aus der Quelle und hängt ihn ans Ziel");
+  check(!(await p.locator(".m-seg input >> nth=0").inputValue()).includes("Bahnstreik"), "die Quelle zeigt den Abschnitt nicht mehr");
+
+  // zurückstellen, damit die folgenden Prüfungen vom Ausgangszustand ausgehen
+  await api("POST", `/api/host/segments/${segsA[0].id}/transfer`, { target_episode_id: a.id, mode: "move" });
+  await api("DELETE", `/api/host/segments/${copied.id}`);
+  check((await api("GET", `/api/host/episodes/${a.id}/segments`)).length === 5 && (await api("GET", `/api/host/episodes/${b.id}/segments`)).length === 5, "Ausgangszustand wiederhergestellt");
+
   // Folgenliste zeigt Vorbereitungen nicht als Folgen
   await p.goto(BASE + "/episodes");
   await p.waitForSelector("main");

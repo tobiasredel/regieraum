@@ -22,7 +22,8 @@ from app.errors import ApiError
 from tests.app_util import host_login
 
 ROOT = Path(__file__).resolve().parent.parent
-EN = json.loads((ROOT / "app" / "static" / "i18n" / "en.server.json").read_text(encoding="utf-8"))
+EN = {k: v for f in sorted((ROOT / "app" / "static" / "i18n").glob("en.*.json")) for k, v in json.loads(f.read_text(encoding="utf-8")).items()}
+EN_WAVES: dict = {}  # früher eigene Dateien je Paket; EN umfasst inzwischen alle Wörterbücher
 
 
 def set_ui(client, lang: str) -> None:
@@ -521,7 +522,7 @@ def test_every_api_error_message_has_an_english_entry():
     found = _literal_messages()
     assert len(found) > 60  # der Sammler findet die Meldungen wirklich
     dynamic = found.pop("<dynamisch>", [])
-    missing = {m: where for m, where in found.items() if m not in EN}
+    missing = {m: where for m, where in found.items() if m not in EN and m not in EN_WAVES}
     assert not missing, json.dumps(missing, ensure_ascii=False, indent=1)
     # nur die bekannten Fälle dürfen dynamisch sein: Text aus Ausnahmen anderer Pakete (Dateien, Cover, Speicher)
     assert all(any(k in d for k in ("str(exc)", "missing")) for d in dynamic), dynamic

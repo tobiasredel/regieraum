@@ -1,6 +1,6 @@
 // Einstellungen: Show-Daten, Cover, Klang, Einladungen, Import, Feed-Vorschau, Systemstatus.
 import {
-  $, api, button, clear, confirmDialog, copyText, errorText, field, fmtBytes, fmtDateTime, h, icon, LANG, poll, progressBar, t, toast,
+  $, api, button, clear, confirmDialog, copyText, errorText, field, fmtBytes, fmtDateTime, fmtUsd, h, icon, LANG, poll, progressBar, t, toast,
 } from "./common.js";
 
 const root = $("#app");
@@ -37,9 +37,9 @@ function safeSession(op, value) {
 function render() {
   clear(root);
   const toc = h("nav", { class: "m-toc", "aria-label": t("Auf dieser Seite") },
-    ...[["sprache", t("Sprache")], ["show", t("Show")], ["format", t("Sendung und Format")], ["cover", t("Cover")], ["klang", t("Klang")], ["einladungen", t("Einladungen")], ["import", t("Import")], ["feed", t("Feed")], ["status", t("Systemstatus")]]
+    ...[["sprache", t("Sprache")], ["show", t("Show")], ["format", t("Sendung und Format")], ["cover", t("Cover")], ["klang", t("Klang")], ["archiv", t("Rohdaten und Archiv")], ["einladungen", t("Einladungen")], ["import", t("Import")], ["feed", t("Feed")], ["seite", t("Öffentliche Seite")], ["downloads", t("Downloads")], ["status", t("Systemstatus")]]
       .map(([k, label]) => h("a", { href: `#${k}` }, label)));
-  root.append(toc, languageSection(), showSection(), formatSection(), coverSection(), audioSection(), inviteSection(), importSection(), feedSection(), h("section", { class: "m-section", id: "status" }, h("h2", { class: "m-h2" }, t("Systemstatus")), h("div", { id: "m-status" }, h("p", { class: "tr-small" }, t("Status wird geladen")))));
+  root.append(toc, languageSection(), showSection(), formatSection(), coverSection(), audioSection(), archiveSection(), inviteSection(), importSection(), feedSection(), siteSection(), statsSection(), h("section", { class: "m-section", id: "status" }, h("h2", { class: "m-h2" }, t("Systemstatus")), h("div", { id: "m-status" }, h("p", { class: "tr-small" }, t("Status wird geladen")))));
 }
 
 // --- Sprache ------------------------------------------------------------------------------------
@@ -285,6 +285,29 @@ function audioSection() {
     h("div", { class: "app-row m-ed-save" }, button(t("Klang speichern"), { onclick: save }), state));
 }
 
+// --- Archiv -------------------------------------------------------------------------------------
+function archiveSection() {
+  const a = settings.archive || { after_days: 14, available: false };
+  const days = input("number", a.after_days, { min: "0", max: "3650", inputmode: "numeric", id: "m-arch-days", disabled: !a.available });
+  const state = h("span", { class: "m-save-state", role: "status" });
+  const save = async () => {
+    const v = parseInt(days.value, 10);
+    if (Number.isNaN(v) || v < 0 || v > 3650) { state.textContent = t("Die Frist muss zwischen 0 und 3650 Tagen liegen"); state.className = "m-save-state tr-status-error"; return; }
+    try {
+      settings = await api("/settings", { method: "PUT", json: { archive: { after_days: v } } });
+      state.textContent = t("Gespeichert");
+      state.className = "m-save-state tr-status-ok";
+    } catch (e) {
+      state.textContent = errorText(e);
+      state.className = "m-save-state tr-status-error";
+    }
+  };
+  return section("archiv", t("Rohdaten und Archiv"),
+    h("p", { class: "m-lead" }, t("Rohspuren, Zwischenstände und Mischungen belegen etwa 1 bis 2 GB je Stunde Aufnahme. Veröffentlichte Folgen können sie nach einer Frist ins Archiv verschieben. Die fertige Folge, Wellenform, Transkript und Kapitel bleiben lokal.")),
+    field(t("Rohdaten ins Archiv, Tage nach dem Veröffentlichen"), days, { id: "m-arch-days", hint: a.available ? t("0 verschiebt sofort nach dem Veröffentlichen, Vorgabe sind 14 Tage") : t("Es ist kein Archiv eingerichtet. Die Umgebungsvariable PS_ARCHIVE_DIR muss auf einen Ordner im Container zeigen") }),
+    h("div", { class: "app-row m-ed-save" }, button(t("Frist speichern"), { onclick: save, disabled: !a.available }), state));
+}
+
 // --- Einladungen --------------------------------------------------------------------------------
 function inviteSection() {
   const box = h("div", { id: "m-invites" });
@@ -461,6 +484,103 @@ function feedSection() {
     h("p", null, h("a", { href: "/api/host/feed/preview", target: "_blank", rel: "noopener" }, t("Feed in neuem Tab öffnen"))));
 }
 
+// --- Öffentliche Seite -------------------------------------------------------------------------------
+const MAX_PLATFORMS = 6;
+
+function siteSection() {
+  const site = settings.site || { enabled: true, platforms: [] };
+  const on = h("input", { type: "checkbox", checked: !!site.enabled, id: "m-site-on" });
+  const platforms = site.platforms.map((p) => ({ ...p }));
+  const list = h("div", { class: "m-plat-list" });
+  const addBtn = button(t("Link hinzufügen"), { icon: "plus", onclick: () => { if (platforms.length < MAX_PLATFORMS) { platforms.push({ name: "", url: "" }); draw(); list.querySelector(".m-plat-row:last-child input")?.focus(); } } });
+  const draw = () => {
+    clear(list);
+    platforms.forEach((p, i) => {
+      const name = input("text", p.name, { maxlength: "60", placeholder: t("Name, zum Beispiel Apple Podcasts") });
+      const url = input("url", p.url, { maxlength: "500", placeholder: "https://…", inputmode: "url", autocomplete: "off" });
+      name.addEventListener("input", () => { p.name = name.value; });
+      url.addEventListener("input", () => { p.url = url.value; });
+      list.append(h("div", { class: "m-plat-row" },
+        field(t("Name"), name, { id: `m-plat-name-${i}` }),
+        field(t("Adresse"), url, { id: `m-plat-url-${i}` }),
+        button("", { icon: "trash", ariaLabel: t("Link {n} entfernen", { n: i + 1 }), title: t("Entfernen"), onclick: () => { platforms.splice(i, 1); draw(); } })));
+    });
+    addBtn.hidden = platforms.length >= MAX_PLATFORMS;
+  };
+  draw();
+  const address = h("div", { id: "m-site-address" });
+  api("/status").then((s) => {
+    if (!s.storage.public_base_url) return;
+    const url = `${s.storage.public_base_url.replace(/\/$/, "")}/index.html`;
+    const box = h("input", { class: "tr-input m-url", type: "text", readonly: true, value: url, onfocus: (e) => e.target.select() });
+    address.append(field(t("Adresse der Seite"), box, { id: "m-site-url", hint: t("Die Adresse enthält index.html, weil manche Speicher unter der Domain allein keine Seite ausliefern") }),
+      h("div", { class: "app-row" }, button(t("Seite öffnen"), { icon: "external", onclick: () => window.open(url, "_blank", "noopener") })));
+  }).catch(() => {});
+  const state = h("span", { class: "m-save-state", role: "status" });
+  const save = async () => {
+    state.className = "m-save-state";
+    state.textContent = t("Speichert");
+    try {
+      const body = { enabled: on.checked, platforms: platforms.filter((p) => p.name.trim() || p.url.trim()).map((p) => ({ name: p.name.trim(), url: p.url.trim() })) };
+      settings = await api("/settings", { method: "PUT", json: { site: body } });
+      state.textContent = t("Gespeichert");
+      state.className = "m-save-state tr-status-ok";
+    } catch (e) {
+      state.textContent = errorText(e);
+      state.className = "m-save-state tr-status-error";
+    }
+  };
+  return section("seite", t("Öffentliche Seite"),
+    h("p", { class: "m-lead" }, t("Eine einfache Webseite zur Show mit Folgenliste und Player, ohne Zusatzdienste. Sie wird bei jedem Veröffentlichen neben dem Feed im Speicher aktualisiert.")),
+    h("label", { class: "m-check", for: "m-site-on" }, on, h("span", null, t("Öffentliche Seite anlegen"))),
+    h("p", { class: "tr-small m-hint" }, t("Ist unter Show keine eigene Webseite eingetragen, verweist der Feed auf diese Seite")),
+    address,
+    h("h3", { class: "m-h3 m-h3-gap" }, t("Links zu Podcast-Apps")),
+    h("p", { class: "tr-small" }, t("Höchstens 6 Links, zum Beispiel zu Apple Podcasts und Spotify")),
+    list,
+    h("div", { class: "app-row" }, addBtn),
+    h("div", { class: "app-row m-ed-save" }, button(t("Öffentliche Seite speichern"), { onclick: save }), state));
+}
+
+// --- Downloads zählen -------------------------------------------------------------------------------------
+function statsSection() {
+  const cur = settings.stats || { mode: "off", prefix: "" };
+  const prefix = input("url", cur.prefix, { maxlength: "300", placeholder: "https://op3.dev/e/", inputmode: "url", autocomplete: "off" });
+  const modes = [
+    ["off", t("Aus"), t("Die Adressen im Feed zeigen direkt auf den Speicher")],
+    ["app", t("Über diese App"), t("Die Adressen führen über diese App, die den Abruf zählt und weiterleitet. Gezählt wird je Folge und Tag einmal je Besucher, ohne IP-Adresse zu speichern.")],
+    ["prefix", t("Über einen Zähldienst"), t("Vor jede Adresse kommt das Präfix eines Zähldienstes wie OP3, gezählt wird dort")],
+  ];
+  const radios = h("div", { class: "m-radios", role: "radiogroup", "aria-labelledby": "m-stats-label" });
+  modes.forEach(([v, name, desc]) => radios.append(h("div", null,
+    h("label", { class: "m-check", for: `m-stats-${v}` }, h("input", { type: "radio", name: "m-stats", id: `m-stats-${v}`, value: v, checked: cur.mode === v, "aria-describedby": `m-stats-${v}-d` }), h("span", null, name)),
+    h("p", { class: "tr-small m-radio-desc", id: `m-stats-${v}-d` }, desc))));
+  const prefixField = field(t("Präfix des Zähldienstes"), prefix, { id: "m-stats-prefix", hint: t("Zum Beispiel https://op3.dev/e/") });
+  const sync = () => { prefixField.hidden = radios.querySelector("input:checked")?.value !== "prefix"; };
+  radios.addEventListener("change", sync);
+  sync();
+  const state = h("span", { class: "m-save-state", role: "status" });
+  const save = async () => {
+    const mode = radios.querySelector("input:checked")?.value || "off";
+    state.className = "m-save-state";
+    state.textContent = t("Speichert");
+    try {
+      settings = await api("/settings", { method: "PUT", json: { stats: { mode, prefix: prefix.value.trim() } } });
+      state.textContent = t("Gespeichert");
+      state.className = "m-save-state tr-status-ok";
+    } catch (e) {
+      state.textContent = errorText(e);
+      state.className = "m-save-state tr-status-error";
+    }
+  };
+  return section("downloads", t("Downloads zählen"),
+    h("p", { class: "m-lead" }, t("Ohne Spotify for Creators gibt es keine Hörerzahlen. Hier lassen sich Abrufe der Audiodateien zählen.")),
+    h("div", { class: "tr-field m-field" }, h("span", { class: "tr-label", id: "m-stats-label" }, t("Zählung")), radios),
+    prefixField,
+    h("p", { class: "tr-small" }, t("Die Adressen der Audiodateien im Feed ändern sich; Podcast-Apps erkennen Folgen an ihrer Kennung und laden nichts neu")),
+    h("div", { class: "app-row m-ed-save" }, button(t("Zählung speichern"), { onclick: save }), state));
+}
+
 // --- Systemstatus -----------------------------------------------------------------------------------
 async function loadStatus() {
   const box = $("#m-status");
@@ -475,6 +595,14 @@ async function loadStatus() {
     rows.push([t("Vorschläge für Titel und Shownotes"), "", s.ai.configured ? t("eingerichtet") : t("nicht eingerichtet, Vorschläge entfallen"), s.ai.configured ? "ok" : "warn"]);
     rows.push([t("Transkription"), t("Modell {model}", { model: s.whisper.model }), s.whisper.downloaded ? t("Modell vorhanden") : t("Modell wird beim ersten Lauf geladen"), s.whisper.downloaded ? "ok" : "warn"]);
     rows.push([t("Freier Speicherplatz"), fmtBytes(s.disk_free_bytes), "", ""]);
+    const ar = s.archive || {};
+    rows.push([t("Belegt von allen Folgen"), fmtBytes(ar.episodes_bytes), "", ""]);
+    if (ar.configured) rows.push([t("Archiv"), fmtBytes(ar.archive_bytes), ar.archive_free_bytes != null ? t("{size} frei", { size: fmtBytes(ar.archive_free_bytes) }) : t("Ordner fehlt"), ar.archive_free_bytes != null ? "ok" : "warn"]);
+    else rows.push([t("Archiv"), "", t("nicht eingerichtet. Mit PS_ARCHIVE_DIR lassen sich Rohdaten auslagern"), "warn"]);
+    for (const [label, c] of [[t("KI-Kosten im laufenden Monat"), s.costs?.current], [t("KI-Kosten im Vormonat"), s.costs?.previous]]) {
+      if (!c) continue;
+      rows.push([label, fmtUsd(c.total), c.total > 0 ? t("Recherche {research}, Live-Begleiter {companion}, Shownotes {shownotes}", { research: fmtUsd(c.by_kind.research), companion: fmtUsd(c.by_kind.companion), shownotes: fmtUsd(c.by_kind.shownotes) }) : "", ""]);
+    }
     const dl = h("dl", { class: "m-dl m-status-dl" });
     rows.forEach(([k, v, st, cls]) => dl.append(h("div", null, h("dt", null, k), h("dd", null, v ? h("span", { class: "m-num" }, v) : null, v && st ? " · " : null, st ? h("span", { class: cls ? `tr-status-${cls}` : "" }, st) : null))));
     clear(box);
