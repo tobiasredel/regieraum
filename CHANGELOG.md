@@ -25,6 +25,8 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ### Changed
 
+- Suggested summaries and show notes speak as the hosts ("We talk about …") instead of naming them in the third
+  person.
 - With the show site on, every feed entry links to its own episode page, also for imported episodes that still
   carried the link of their old host.
 

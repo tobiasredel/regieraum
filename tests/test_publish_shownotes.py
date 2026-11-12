@@ -179,3 +179,9 @@ def test_messages_name_no_provider():
 def test_show_may_be_dict():
     system, _ = build_prompt(TRANSCRIPT, {"title": "X", "description": "Y"}, [], [])
     assert "„X“" in system and "Y" in system
+
+
+def test_prompt_asks_for_we_perspective():
+    from publish import shownotes
+
+    assert "Wir-Form" in shownotes.SYSTEM and "nie in der dritten Person" in shownotes.SYSTEM

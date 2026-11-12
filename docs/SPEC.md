@@ -577,7 +577,9 @@ nicht lesbar, wirft die Funktion `FeedImportError`. Fehlt die Dauer im Feed, wir
 Shownotes: `publish.shownotes.suggest(transcript, show, chapters, previous_titles) -> {titles, summary,
 description_html, chapter_titles}` über die Anthropic-API (strukturierte Ausgabe, Modell `PS_AI_MODEL`). `chapters` sind
 `[{event_id, start_ms | at_ms | startTime, title}]`; `chapter_titles` ist `{event_id: titel}`. Ton der Show: politisch,
-sarkastisch, humorvoll; die Vorschläge dürfen das aufnehmen, ohne zu erfinden, was nicht gesagt wurde. Ohne Schlüssel oder
+sarkastisch, humorvoll; die Vorschläge dürfen das aufnehmen, ohne zu erfinden, was nicht gesagt wurde. Zusammenfassung und
+Shownotes stehen in der Wir-Form der Gastgeber („Wir sprechen über …“), nie in der dritten Person über sie (Ergänzung
+12.11.2026). Ohne Schlüssel oder
 bei Dienstfehlern: `ShownotesUnavailable` mit deutscher Meldung.
 
 Hilfen für den Server: `publish.release.upload_episode_assets(storage, episode, mp3, chapters, vtt) -> {audio_key,

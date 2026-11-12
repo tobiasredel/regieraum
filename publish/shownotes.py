@@ -74,6 +74,7 @@ Was nicht gesagt wurde, steht nicht in den Shownotes.
 - Keine Links, außer Adressen, die im Transkript ausdrücklich genannt werden.
 - Keine Beleidigungen oder Tatsachenbehauptungen über Personen, die nicht im Transkript stehen.
 - Erwähne nie, dass ein Programm oder eine KI den Text geschrieben hat.
+- Perspektive: summary und description_html sprechen als die Gastgeber in der Wir-Form („Wir sprechen über …“, „In dieser Folge …“), nie in der dritten Person über sie („Anna und Ben sprechen über …“). Gäste dürfen mit Namen genannt werden („mit Gast Carla …“).
 
 Ausgabe:
 - titles: genau fünf verschiedene Titelvorschläge im Stil der bisherigen Titel (Länge, Satzbau, Zeichensetzung), \
