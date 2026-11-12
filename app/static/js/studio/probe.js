@@ -24,7 +24,7 @@ function pickType() {
  * @param {() => MediaStream | null} getStream  liefert den aktuell geöffneten Mikrofon-Stream (oder die Testquelle)
  * @returns {{ el: HTMLElement, enable: () => void, dispose: () => void }}
  */
-export function createProbe(getStream) {
+export function createProbe(getStream, getSink = () => "") {
   let state = "idle"; // idle | recording | ready
   let rec = null, timer = 0, url = "", audio = null, enabled = false;
 
@@ -96,7 +96,10 @@ export function createProbe(getStream) {
     a.addEventListener("timeupdate", () => { el.dataset.pos = a.currentTime.toFixed(2); });
     a.addEventListener("ended", () => { if (a !== audio) return; play.disabled = false; status.textContent = t("Aufgenommen"); });
     a.addEventListener("error", () => { if (a !== audio) return; play.disabled = false; status.textContent = t("Die Wiedergabe ist nicht möglich"); });
-    a.play().catch(() => { play.disabled = false; status.textContent = t("Die Wiedergabe ist nicht möglich"); });
+    const sink = getSink();
+    Promise.resolve(sink && a.setSinkId ? a.setSinkId(sink).catch(() => {}) : null)
+      .then(() => a.play())
+      .catch(() => { play.disabled = false; status.textContent = t("Die Wiedergabe ist nicht möglich"); });
   }
 
   start.addEventListener("click", begin);

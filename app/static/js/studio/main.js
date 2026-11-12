@@ -5,9 +5,9 @@
 
 const V = new URL(import.meta.url).search;
 const imp = (m) => import(`./${m}${V}`);
-const [U, C, Store, Rec, Net, RTC, Snd, Media, Id, Plan, Probe] = await Promise.all([
+const [U, C, Store, Rec, Net, RTC, Snd, Media, Id, Plan, Probe, Out] = await Promise.all([
   imp("util.js"), imp("clock.js"), imp("store.js"), imp("recorder.js"), imp("net.js"), imp("rtc.js"),
-  imp("sounds.js"), imp("media.js"), imp("identity.js"), imp("plan.js"), imp("probe.js"),
+  imp("sounds.js"), imp("media.js"), imp("identity.js"), imp("plan.js"), imp("probe.js"), imp("output.js"),
 ]);
 const { h, fill, icon, dur, num1, toDb, toast, params, isMobile, api } = U;
 const { t, LOCALE } = await import(`../i18n.js${V}`);
@@ -21,7 +21,7 @@ const TEST = P.get("testsignal"); // "1"/"server" oder "local"
 const S = {
   role: ROLE, token: null, me: null, room: null, ctx: null, audioClock: null, clock: new C.ServerClock(), store: null,
   recorder: null, mesh: null, jingles: null, socket: null, plan: null,
-  mic: null, rtcAudio: null, micId: null, headphones: !isMobile(), mobile: isMobile(), cam: false, camStream: null,
+  mic: null, rtcAudio: null, micId: null, outId: "", outLabel: "", outChecked: false, headphones: !isMobile(), mobile: isMobile(), cam: false, camStream: null,
   muted: false, peerMeter: new Map(), progress: new Map(), media: new Map(), localMeter: null,
   stopped: null, wakeLock: null, wasHidden: false, entered: false, fatal: null, lastStatus: null,
 };
@@ -87,6 +87,8 @@ function renderCheck({ name, label }) {
   const pr = Id.prefs.load();
   S.headphones = S.mobile ? false : pr.headphones !== false;
   S.micId = pr.micId || null;
+  S.outId = Out.elementSupported() ? pr.outId || "" : "";
+  S.outLabel = pr.outLabel || "";
   const err = h("p", { class: "ps-error", role: "alert", hidden: true });
   const nameIn = h("input", { class: "tr-input", id: "ps-name", name: "name", autocomplete: "name", maxlength: 60, value: name || "", placeholder: t("Vorname") });
   const micSel = h("select", { class: "tr-input ps-select", id: "ps-mic", disabled: true }, h("option", {}, t("Erst Mikrofon freigeben")));
@@ -98,7 +100,10 @@ function renderCheck({ name, label }) {
   const camBox = h("input", { type: "checkbox", id: "ps-cam" });
   const camPrev = h("video", { class: "ps-cam-preview", muted: true, playsinline: true, autoplay: true, hidden: true });
   camPrev.muted = true;
-  const probe = Probe.createProbe(() => S.mic);
+  const probe = Probe.createProbe(() => S.mic, () => S.outId);
+  const outSel = h("select", { class: "tr-input ps-select", id: "ps-out", disabled: true, hidden: !Out.elementSupported() }, h("option", {}, t("Erst Mikrofon freigeben")));
+  const outPick = h("button", { class: "tr-btn tr-btn-secondary", type: "button", id: "ps-out-pick", hidden: true }, t("Anderen Ausgang wählen"));
+  const outNote = h("small", { id: "ps-out-note" }, Out.elementSupported() ? t("Ist der Ton zu hören, passt der Ausgang") : t("Der Ton kommt über den Ausgang, der im System eingestellt ist"));
   const toneBtn = h("button", { class: "tr-btn tr-btn-secondary", type: "button", disabled: true }, icon("speaker"), t("Testton abspielen"));
   const go = h("button", { class: "tr-btn tr-btn-primary", type: "submit", id: "ps-go" }, icon("mic"), t("Mikrofon freigeben"));
   const hint = h("p", { class: "ps-small", id: "ps-go-hint" }, t("Der Browser fragt nach dem Mikrofon. Danach erscheint der Pegel."));
@@ -114,13 +119,14 @@ function renderCheck({ name, label }) {
       h("div", { class: "ps-field" }, h("label", { class: "tr-label", for: "ps-mic" }, t("Mikrofon")), micSel,
         h("div", { class: "ps-meter", "aria-label": t("Eingangspegel"), role: "meter", "aria-valuemin": "-60", "aria-valuemax": "0" }, h("span", { class: "ps-meter-track" }, meterFill), meterText),
         clipText),
+      h("div", { class: "ps-field" }, h(Out.elementSupported() ? "label" : "span", { class: "tr-label", for: Out.elementSupported() ? "ps-out" : undefined }, t("Ausgang")), outSel,
+        h("div", { class: "ps-inline" }, toneBtn, outPick), outNote),
       h("fieldset", { class: "ps-field ps-choice" }, h("legend", { class: "tr-label" }, t("Kopfhörer")),
         h("label", { for: "ps-hp-yes" }, hpYes, h("span", {}, t("Mit Kopfhörern")), h("small", {}, t("unbearbeitetes Signal, beste Qualität"))),
         h("label", { for: "ps-hp-no" }, hpNo, h("span", {}, t("Ohne Kopfhörer")), h("small", {}, t("Echounterdrückung an")))),
       probe.el,
       h("div", { class: "ps-field" }, h("span", { class: "tr-label" }, t("Kamera")),
-        h("label", { class: "ps-check-line", for: "ps-cam" }, camBox, h("span", {}, t("Kamera einschalten (nur live, wird nie aufgezeichnet)"))), camPrev),
-      h("div", { class: "ps-field" }, h("span", { class: "tr-label" }, t("Ausgang")), h("div", {}, toneBtn), h("small", {}, t("Ist der Ton zu hören, passt der Ausgang")))),
+        h("label", { class: "ps-check-line", for: "ps-cam" }, camBox, h("span", {}, t("Kamera einschalten (nur live, wird nie aufgezeichnet)"))), camPrev)),
     h("div", { class: "ps-check-actions" }, go, hint));
   fill(app, form);
 
@@ -141,6 +147,7 @@ function renderCheck({ name, label }) {
     const AC = window.AudioContext || window.webkitAudioContext;
     try { S.ctx = new AC({ sampleRate: 48000, latencyHint: "interactive" }); } catch { S.ctx = new AC({ latencyHint: "interactive" }); }
     await S.ctx.resume().catch(() => {});
+    await syncContextSink();
   }
 
   async function openMic() {
@@ -161,6 +168,7 @@ function renderCheck({ name, label }) {
         const AC = window.AudioContext || window.webkitAudioContext;
         S.ctx = new AC({ latencyHint: "interactive" });
         await S.ctx.resume().catch(() => {});
+        await syncContextSink();
         srcNode = S.ctx.createMediaStreamSource(S.mic);
       } else throw e;
     }
@@ -175,6 +183,24 @@ function renderCheck({ name, label }) {
     const { mics } = await Media.listDevices();
     fill(micSel, mics.map((d, i) => h("option", { value: d.deviceId, selected: d.deviceId === S.micId }, d.label || t("Mikrofon {n}", { n: i + 1 }))));
     micSel.disabled = mics.length < 2;
+    await fillOutputs();
+  }
+
+  async function fillOutputs() {
+    if (!Out.elementSupported()) return;
+    const outs = await Out.listOutputs().catch(() => []);
+    // Geräte-IDs können sich ändern (Safari, gelöschte Website-Daten): dann über den Namen wiederfinden
+    if (S.outId && !outs.some((d) => d.deviceId === S.outId)) {
+      const same = S.outLabel && outs.find((d) => d.label === S.outLabel);
+      S.outId = same ? same.deviceId : "";
+      Id.prefs.save({ outId: S.outId });
+    }
+    S.outChecked = true;
+    await syncContextSink();
+    fill(outSel, Out.options(h, outs, S.outId));
+    outSel.disabled = false;
+    outPick.hidden = !Out.canPick();
+    if (S.ctx && !Out.contextSupported(S.ctx)) outNote.textContent = t("Jingles und Testton kommen in diesem Browser über den Standardausgang des Systems");
   }
 
   function startMeter() {
@@ -215,6 +241,13 @@ function renderCheck({ name, label }) {
     }
   });
   toneBtn.addEventListener("click", async () => { await ensureCtx(); Media.testTone(S.ctx); });
+  outSel.addEventListener("change", () => setOutput(outSel.value));
+  outPick.addEventListener("click", async () => {
+    const id = await Out.pick();
+    if (!id) return;
+    await setOutput(id);
+    await fillOutputs();
+  });
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -422,6 +455,7 @@ function soundById(id) { return ((S.room && S.room.sounds) || []).find((s) => s.
 function applyRoom(room) {
   const prevEp = S.room && S.room.episode;
   S.room = room;
+  if (prevEp && prevEp.status === "recording" && (room.episode || {}).status !== "recording") syncContextSink(); // aufgeschobener Wechsel
   const ep = room.episode || {};
   S.mesh.sync(room.peers || []);
   S.jingles.preload(room.sounds);
@@ -511,9 +545,33 @@ async function setCam(on) {
 }
 
 async function refreshDeviceSelect() {
+  if (UI.outSel && Out.elementSupported()) fill(UI.outSel, Out.options(h, await Out.listOutputs().catch(() => []), S.outId));
   if (!UI.micSel || TEST) return;
   const { mics } = await Media.listDevices().catch(() => ({ mics: [] }));
   fill(UI.micSel, mics.map((d, i) => h("option", { value: d.deviceId, selected: d.deviceId === S.micId }, d.label || t("Mikrofon {n}", { n: i + 1 }))));
+}
+
+// ---------------------------------------------------------------------- Ausgang
+/** Ausgang wählen: Stimmen sofort, Jingles und Testton über den AudioContext. Der Context wechselt nie während einer
+ *  Aufnahme (der Rekorder hängt an ihm; ein Gerätewechsel kann dort eine Lücke reißen), sondern danach. */
+async function setOutput(id, inStudio = false) {
+  S.outId = id || "";
+  S.outChecked = true;
+  const dev = S.outId ? (await Out.listOutputs().catch(() => [])).find((d) => d.deviceId === S.outId) : null;
+  S.outLabel = dev ? dev.label : "";
+  Id.prefs.save({ outId: S.outId, outLabel: S.outLabel });
+  for (const m of S.media.values()) await Out.setElement(m.audio, S.outId);
+  const later = await syncContextSink();
+  if (inStudio && later) toast(t("Jingles wechseln den Ausgang nach der Aufnahme"), 5000);
+}
+
+/** -> true, wenn der Wechsel des Context auf das Ende der Aufnahme wartet. */
+async function syncContextSink() {
+  // erst wenn das gespeicherte Gerät bestätigt ist (nach der Mikrofon-Freigabe sind die Geräte sichtbar)
+  if (!S.ctx || !S.outChecked || !Out.contextSupported(S.ctx) || Out.contextSink(S.ctx) === S.outId) return false;
+  if (isRecording()) return true;
+  await Out.setContext(S.ctx, S.outId);
+  return false;
 }
 
 // ---------------------------------------------------------------------- Live-Medien
@@ -527,6 +585,7 @@ function attachMedia(id) {
     m.video.setAttribute("playsinline", "");
     UI.audioSink.append(m.audio);
     S.media.set(id, m);
+    if (S.outId) Out.setElement(m.audio, S.outId);
   }
   const a = peer.stream.getAudioTracks()[0];
   const v = peer.stream.getVideoTracks()[0];
@@ -646,6 +705,7 @@ function buildStudio() {
   UI.hpSel = h("select", { class: "tr-input ps-select", id: "ps-hp", onchange: () => switchMic({ headphones: UI.hpSel.value === "1" }) },
     h("option", { value: "1" }, t("Mit Kopfhörern")), h("option", { value: "0" }, t("Ohne Kopfhörer")));
   UI.micSel = h("select", { class: "tr-input ps-select", id: "ps-mic2", disabled: !!TEST, onchange: () => switchMic({ deviceId: UI.micSel.value }) });
+  UI.outSel = h("select", { class: "tr-input ps-select", id: "ps-out2", onchange: () => setOutput(UI.outSel.value, true) });
   UI.muteNote = h("p", { class: "ps-mute-note tr-status-warn", hidden: true }, t("Stumm: Live-Ton und Aufnahme sind still"));
   UI.selfMeterFill = h("span", { class: "ps-meter-fill" });
   UI.selfMeterDb = h("span", { class: "ps-meter-db" }, "–");
@@ -664,7 +724,8 @@ function buildStudio() {
     h("div", { class: "ps-self-actions" }, UI.muteBtn, UI.camBtn),
     h("div", { class: "ps-self-fields" },
       h("div", { class: "ps-field" }, h("label", { class: "tr-label", for: "ps-hp" }, t("Hören über")), UI.hpSel),
-      h("div", { class: "ps-field" }, h("label", { class: "tr-label", for: "ps-mic2" }, t("Mikrofon")), UI.micSel)),
+      h("div", { class: "ps-field" }, h("label", { class: "tr-label", for: "ps-mic2" }, t("Mikrofon")), UI.micSel),
+      Out.elementSupported() ? h("div", { class: "ps-field" }, h("label", { class: "tr-label", for: "ps-out2" }, t("Ausgang")), UI.outSel) : null),
     h("p", { class: "ps-small" }, t("Ein Wechsel beginnt eine neue Spur. Bisheriges bleibt erhalten.")));
 
   UI.peers = h("ul", { class: "ps-peers", "aria-label": t("Teilnehmer") });

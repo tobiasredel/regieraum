@@ -257,5 +257,11 @@
   "{n} Teilnehmer laden noch hoch": "{n} participants are still uploading",
   "{n} unterbrochene Spuren werden nachgeladen": "{n} interrupted tracks are being uploaded",
   "{what} nicht verfügbar ({reason})": "{what} unavailable ({reason})",
-  "Übersteuert": "Clipping"
+  "Übersteuert": "Clipping",
+  "Systemstandard": "System default",
+  "Ausgang {n}": "Output {n}",
+  "Anderen Ausgang wählen": "Choose another output",
+  "Der Ton kommt über den Ausgang, der im System eingestellt ist": "Sound plays through the output set in your system",
+  "Jingles und Testton kommen in diesem Browser über den Standardausgang des Systems": "In this browser, jingles and the test tone play through the system's default output",
+  "Jingles wechseln den Ausgang nach der Aufnahme": "Jingles switch to this output after the recording"
 }

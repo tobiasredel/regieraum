@@ -402,6 +402,16 @@ Zwei Seiten, ein gemeinsamer Kern: `/studio` (Host) und `/join/<token>` (Gast, z
   (Kopfhörer, Echounterdrückung), danach „Abspielen“ und „Noch einmal“. Rein lokal per MediaRecorder, nichts geht an
   den Server. Mit dem Testsignal geht sie ebenso; ohne MediaRecorder ist sie ausgeblendet. Ein Satz nennt, worauf zu
   achten ist (Hall, Rauschen, Abstand). Prüfung: `tests/e2e/probe.mjs`.
+- Ausgang (Ergänzung 12.11.2026): Im Gerätecheck und im Studio (Feld „Ausgang“ bei „Eigenes Gerät“, im Sendemodus im
+  Fenster „Technik“) lässt sich das Ausgabegerät wählen, „Systemstandard“ zuerst. Stimmen der anderen und die Hörprobe
+  laufen über `<audio>` mit `HTMLMediaElement.setSinkId` (Chrome, Edge, Firefox), Jingles und Testton über
+  `AudioContext.setSinkId` (Chrome, Edge; in Firefox bleiben sie beim Standardausgang, ein Satz sagt das). Firefox zeigt
+  Ausgänge erst nach seiner eigenen Auswahl: Knopf „Anderen Ausgang wählen“ (`selectAudioOutput`). Ohne `setSinkId`
+  (Safari, iPhone) ist das Feld verborgen, ein Satz verweist auf den Systemausgang. Der AudioContext wechselt nie während
+  einer Aufnahme, weil der Rekorder an ihm hängt (ein Gerätewechsel kann eine Lücke reißen); der Wechsel folgt nach dem
+  Ende, ein Hinweis sagt das. Gespeichert werden ID und Name des Geräts (`ps.prefs`), weil sich Geräte-IDs ändern können
+  (Safari, gelöschte Website-Daten); fehlt die ID, wird das Gerät über den Namen wiedergefunden, sonst gilt der
+  Systemstandard. Code: `app/static/js/studio/output.js`. Prüfung: `tests/e2e/output.mjs`.
 - Handy und Tablet: Screen Wake Lock während der Aufnahme. Der Gerätecheck rät vorab, das Studio im Vordergrund zu
   lassen, den Bildschirm nicht zu sperren und ein Ladekabel zu nutzen. Kommt die Seite aus dem Hintergrund zurück,
   steht bei Host und Gast eine Warnung mit derselben Anweisung; auf Handy und Tablet bleibt sie stehen, bis sie

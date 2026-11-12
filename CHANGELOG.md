@@ -9,6 +9,8 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 - Numbering (Settings → Numbering): the year as season or no seasons, a prefix such as `#{number} ` before the title
   in the feed, and "Renumber all episodes" by date with a preview, for imports with duplicate or missing numbers.
   New episodes get the next number when the recording starts.
+- Output device choice in the device check and the studio (Chrome, Edge; Firefox for voices only). Safari keeps
+  the system output.
 
 ### Changed
 
