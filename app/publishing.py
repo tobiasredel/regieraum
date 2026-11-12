@@ -7,6 +7,7 @@ shownotes.suggest(transcript, show, chapters, previous_titles)."""
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 from pathlib import Path
 
@@ -266,6 +267,29 @@ def import_feed(db: DB, cfg: Config, feed_url: str, progress: Callable[[float, s
     return msg
 
 
+def link_titles(links: list[dict], timeout: float = 6.0) -> list[dict]:
+    """Links ohne Titel bekommen den Titel ihrer Seite (`og:title`, sonst `<title>`), damit der Vorschlag weiß, was
+    sich dahinter verbirgt. Was nicht erreichbar ist, bleibt ohne Titel."""
+    import html as _html
+
+    import httpx
+
+    out = []
+    for it in links:
+        title = (it.get("title") or "").strip()
+        if not title:
+            try:
+                r = httpx.get(it["url"], timeout=timeout, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0 (Regieraum)"})
+                head = r.text[:300_000]
+                m = (re.search(r'<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)', head, re.I)
+                     or re.search(r"<title[^>]*>([^<]+)</title>", head, re.I))
+                title = _html.unescape(m.group(1)).strip()[:200] if m else ""
+            except Exception:  # noqa: BLE001 - ohne Titel geht es auch
+                title = ""
+        out.append({"url": it["url"], "title": title})
+    return out
+
+
 def suggest(db: DB, cfg: Config, episode_id: str) -> dict | None:
     """Titel, Zusammenfassung, Shownotes und Kapiteltitel aus dem Transkript. None, wenn nichts zu tun ist."""
     if not cfg.anthropic_key:
@@ -288,6 +312,8 @@ def suggest(db: DB, cfg: Config, episode_id: str) -> dict | None:
     plan = [{k: s[k] for k in ("kind", "title", "input", "good_type", "dossier")} for s in core.plan_of(db, episode_id)]
     if any(s["title"] or s["input"] for s in plan):
         extra["plan"] = plan  # Quellen und Good Read aus dem Sendeplan
+    if ep.get("links"):
+        extra["links"] = link_titles(ep["links"])  # Good Reads des Hosts: stehen immer in den Shownotes
     try:
         result = _suggest(transcript, show, chapters, previous, model=cfg.ai_model, **extra)
     except ShownotesUnavailable as exc:

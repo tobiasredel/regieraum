@@ -16,6 +16,21 @@ const signature = (ep) => `${ep.status}|${JSON.stringify(ep.files)}|${ep.source}
 const runningJob = (ep) => (ep.jobs || []).find((j) => j.status === "running") || (ep.jobs || []).find((j) => j.status === "queued");
 
 // --- Laden -----------------------------------------------------------------------------------
+/** Links-Feld: eine Zeile je Link, Text vor oder nach der Adresse ist der Titel („Regime Change – https://…“). */
+function linksToText(links) {
+  return (links || []).map((l) => (l.title ? `${l.title} – ${l.url}` : l.url)).join("\n");
+}
+function textToLinks(text) {
+  const out = [];
+  for (const line of text.split("\n")) {
+    const m = line.match(/https?:\/\/[^\s<>"']+/i);
+    if (!m) continue;
+    const title = line.replace(m[0], " ").replace(/^[\s–—:|-]+|[\s–—:|-]+$/g, "").replace(/\s+/g, " ").trim();
+    out.push({ url: m[0], title });
+  }
+  return out;
+}
+
 function numberLabel(ep) {
   if (ep.number == null) return t("Folge ohne Nummer");
   if (!ep.season) return t("Folge {n}", { n: ep.number });
@@ -347,6 +362,9 @@ function detailsSection(ep) {
   m.title = h("input", { class: "tr-input", type: "text", value: ep.title || "", maxlength: "300", autocomplete: "off" });
   m.number = h("input", { class: "tr-input", type: "number", min: "0", inputmode: "numeric", value: ep.number ?? "" });
   m.season = h("input", { class: "tr-input", type: "number", min: "0", inputmode: "numeric", value: ep.season ?? "" });
+  m.links = h("textarea", { class: "tr-input", rows: 3, id: "m-links", placeholder: t("Regime Change (Haberman) – https://…"), spellcheck: "false" });
+  m.links.value = linksToText(ep.links);
+  m.links.addEventListener("input", updateDirty);
   m.summary = h("textarea", { class: "tr-input", rows: 3, maxlength: "4000" });
   m.summary.value = ep.summary || "";
   m.explicit = h("input", { type: "checkbox", checked: ep.explicit });
@@ -356,6 +374,7 @@ function detailsSection(ep) {
     title: ep.title || "", number: ep.number ?? null, season: ep.season ?? null, summary: ep.summary || "", explicit: !!ep.explicit,
     description_html: sanitizeHtml(ep.description_html || ""),
     chapters: Object.fromEntries((ep.chapters_preview || []).map((c) => [c.event_id, c.title])),
+    links: JSON.stringify(ep.links || []),
   };
   [m.title, m.number, m.season, m.summary, m.explicit].forEach((el) => el.addEventListener("input", () => { updateDirty(); if (el === m.title) $("#m-title").textContent = el.value.trim() || t("Ohne Titel"); }));
   const prefix = ep.numbering?.prefix || "";
@@ -391,6 +410,7 @@ function detailsSection(ep) {
 
   const sec = section("angaben", t("Angaben"),
     h("div", { class: "app-row m-section-actions" }, state.ui.bSuggest),
+    field(t("Good Reads und Links"), m.links, { id: "m-links", hint: t("Eine Zeile je Link, ein Titel davor ist möglich. Der Vorschlag nimmt sie immer in die Shownotes auf, auch wenn sie im Gespräch nicht genannt wurden") }),
     field(t("Titel"), m.title),
     feedLine,
     state.ui.titleSuggest,
@@ -449,6 +469,7 @@ async function suggestAgain() {
   const b = state.ui.bSuggest;
   b.disabled = true;
   try {
+    if (metaPatch().links) await saveMeta(); // eben eingetragene Links sollen in diesen Vorschlag
     const res = await api(`/episodes/${encodeURIComponent(id)}/suggest`, { method: "POST" });
     toast(res.kind === "transcribe" ? t("Erst entsteht das Transkript, das dauert einige Minuten. Der Vorschlag folgt danach von selbst") : t("Vorschlag wird erzeugt"));
     state.ep = await api(`/episodes/${encodeURIComponent(id)}`);
@@ -486,6 +507,8 @@ function metaPatch() {
   const ct = {};
   for (const [eid, input] of Object.entries(m.chapters)) if (input.value.trim() !== b.chapters[eid]) ct[eid] = input.value.trim();
   if (Object.keys(ct).length) p.chapter_titles = ct;
+  const links = textToLinks(m.links.value);
+  if (JSON.stringify(links) !== b.links) p.links = links;
   return p;
 }
 
@@ -518,6 +541,7 @@ async function saveMeta() {
     const b = state.base;
     for (const k of ["title", "number", "season", "summary", "explicit"]) if (k in patch) b[k] = patch[k];
     if ("description_html" in patch) b.description_html = patch.description_html;
+    if (patch.links) { b.links = JSON.stringify(res.links || []); state.meta.links.value = linksToText(res.links); }
     if (patch.chapter_titles) for (const [eid, title] of Object.entries(patch.chapter_titles)) b.chapters[eid] = title || (res.chapters_preview.find((c) => c.event_id === eid)?.title ?? "");
     for (const c of res.chapters_preview || []) if (state.meta.chapters[c.event_id]) { state.meta.chapters[c.event_id].value = c.title; b.chapters[c.event_id] = c.title; }
     $("#m-title").textContent = res.title || t("Ohne Titel");

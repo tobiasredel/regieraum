@@ -81,6 +81,10 @@ MIGRATIONS: list[str] = [
       day TEXT NOT NULL, episode_id TEXT NOT NULL, visitor TEXT NOT NULL, PRIMARY KEY(day, episode_id, visitor));
     CREATE INDEX downloads_episode ON downloads(episode_id, day);
     """,
+    # Version 6: Links des Hosts für die Shownotes (Good Reads, Empfehlungen), JSON [{url, title}]
+    """
+    ALTER TABLE episodes ADD COLUMN links TEXT;
+    """,
 ]
 
 DEFAULT_PLAN: list[tuple[str, str | None]] = [

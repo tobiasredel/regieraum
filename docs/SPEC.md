@@ -578,6 +578,9 @@ Shownotes: `publish.shownotes.suggest(transcript, show, chapters, previous_title
 description_html, chapter_titles}` über die Anthropic-API (strukturierte Ausgabe, Modell `PS_AI_MODEL`). `chapters` sind
 `[{event_id, start_ms | at_ms | startTime, title}]`; `chapter_titles` ist `{event_id: titel}`. Ton der Show: politisch,
 sarkastisch, humorvoll; die Vorschläge dürfen das aufnehmen, ohne zu erfinden, was nicht gesagt wurde. Zusammenfassung und
+Links des Hosts (`episodes.links`, JSON `[{url, title}]`, Feld „Good Reads und Links“ auf der Folgenseite, höchstens 10,
+nur http(s)) stehen immer in den Shownotes: eigener Block im Prompt, fehlen sie in der Antwort, hängt der Server sie als
+Liste „Unsere Empfehlungen“ an; Links ohne Titel bekommen vorher den Titel ihrer Seite (`og:title`, sonst `<title>`).
 Shownotes stehen in der Wir-Form der Gastgeber („Wir sprechen über …“), nie in der dritten Person über sie (Ergänzung
 12.11.2026). Ohne Schlüssel oder
 bei Dienstfehlern: `ShownotesUnavailable` mit deutscher Meldung.

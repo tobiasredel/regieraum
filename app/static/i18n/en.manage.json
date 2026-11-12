@@ -692,5 +692,8 @@
   "{name}: neue Spur bei {times}. Das Studio beginnt eine, wenn der Ton kurz aussetzt oder das Gerät wechselt; dazwischen fehlen {gap}.": "{name}: new track at {times}. The studio starts one when the sound drops out briefly or the device changes; {gap} is missing in between.",
   "Spurbeginn": "Track start",
   "{s} s vor dem Start": "{s} s before the start",
-  "Weitere Spuren": "Further tracks"
+  "Weitere Spuren": "Further tracks",
+  "Good Reads und Links": "Good reads and links",
+  "Eine Zeile je Link, ein Titel davor ist möglich. Der Vorschlag nimmt sie immer in die Shownotes auf, auch wenn sie im Gespräch nicht genannt wurden": "One link per line, a title before it is optional. The suggestion always puts them in the show notes, even if they were not mentioned in the conversation",
+  "Regime Change (Haberman) – https://…": "Regime Change (Haberman) – https://…"
 }

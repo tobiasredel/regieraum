@@ -6,6 +6,8 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ### Added
 
+- "Good reads and links" on the episode page: links the host adds always end up in the suggested show notes, with
+  the page title fetched when none is given.
 - Numbering (Settings → Numbering): the year as season or no seasons, a prefix such as `#{number} ` before the title
   in the feed, and "Renumber all episodes" by date with a preview, for imports with duplicate or missing numbers.
   New episodes get the next number when the recording starts.

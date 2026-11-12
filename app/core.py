@@ -293,6 +293,7 @@ def episode_load(row: dict | None) -> dict | None:
     ep["ai"] = util.loads(ep["ai"], None) or {}
     ep["report"] = util.loads(ep["report"], None)
     ep["legacy"] = util.loads(ep["legacy"], None)
+    ep["links"] = util.loads(ep.get("links"), None) or []
     return ep
 
 
@@ -398,7 +399,7 @@ def discard_recording(db: DB, ep: dict) -> str:
 def update_episode(db: DB, episode_id: str, **fields: Any) -> None:
     if not fields:
         return
-    for k in ("edl", "ai", "report", "legacy"):
+    for k in ("edl", "ai", "report", "legacy", "links"):
         if k in fields:
             fields[k] = util.dumps(fields[k])
     if "explicit" in fields:

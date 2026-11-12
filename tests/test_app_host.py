@@ -569,3 +569,32 @@ def test_suggest_without_transcript_transcribes_first(client, app, cfg):
     (out / "transcript.json").write_text('{"segments": []}')
     r = client.post(f"/api/host/episodes/{eid}/suggest").json()
     assert r["kind"] == "suggest"
+
+
+def test_host_links_saved_validated_and_passed_to_suggestion(client, app, cfg, monkeypatch):
+    import dataclasses
+
+    from app import publishing
+    from publish import shownotes
+
+    eid, out = _make_episode(app, cfg, status="review")
+    r = client.patch(f"/api/host/episodes/{eid}", json={"links": [{"url": "ftp://x"}]})
+    assert r.status_code == 422
+    links = [{"url": "https://buch.example/a", "title": "Regime Change"}, {"url": "https://podcast.example/ezra"}]
+    r = client.patch(f"/api/host/episodes/{eid}", json={"links": links})
+    assert r.status_code == 200 and r.json()["links"] == [{"url": "https://buch.example/a", "title": "Regime Change"},
+                                                          {"url": "https://podcast.example/ezra", "title": ""}]
+
+    class Page:
+        text = '<html><head><meta property="og:title" content="The Ezra Klein Show &amp; Co"><title>x</title></head></html>'
+
+    fetched = []
+    monkeypatch.setattr("httpx.get", lambda url, **kw: (fetched.append(url), Page())[1])
+    seen = {}
+    monkeypatch.setattr(shownotes, "suggest", lambda *a, **kw: (seen.update(kw), {"titles": [], "summary": "", "description_html": "", "chapter_titles": {}})[1])
+    (out / "transcript.json").write_text('{"segments": [{"start_ms": 0, "end_ms": 1000, "speaker": "A", "text": "Hallo"}]}')
+    publishing.suggest(app.state.db, dataclasses.replace(cfg, anthropic_key="k"), eid)
+    assert fetched == ["https://podcast.example/ezra"]  # nur der Link ohne Titel wird abgerufen
+    assert seen["links"] == [{"url": "https://buch.example/a", "title": "Regime Change"},
+                             {"url": "https://podcast.example/ezra", "title": "The Ezra Klein Show & Co"}]
+    assert client.patch(f"/api/host/episodes/{eid}", json={"links": []}).json()["links"] == []

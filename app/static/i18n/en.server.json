@@ -277,5 +277,6 @@
   "Die Folgen haben sich seit der Vorschau geändert. Bitte die Vorschau neu laden": "The episodes have changed since the preview. Please reload the preview",
   "Im Präfix sind als Platzhalter nur {a} und {b} erlaubt": "Only {a} and {b} are allowed as placeholders in the prefix",
   "Während einer Aufnahme lässt sich nicht neu nummerieren": "Renumbering is not possible while recording",
-  "Ohne Transkript gibt es keinen Vorschlag, und für diese Folge lässt sich keins erstellen": "Without a transcript there is no suggestion, and none can be created for this episode"
+  "Ohne Transkript gibt es keinen Vorschlag, und für diese Folge lässt sich keins erstellen": "Without a transcript there is no suggestion, and none can be created for this episode",
+  "Jeder Link braucht eine Adresse mit https:// oder http://": "Every link needs an address starting with https:// or http://"
 }

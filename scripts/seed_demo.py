@@ -321,7 +321,7 @@ def main() -> None:
         ai = {
             "titles": ["Zuständigkeit ist ein Zustand", "Der Zug war nie vorgesehen", "Verzögerung im Betriebsablauf"],
             "summary": "Max und Tobias klären, wer wofür zuständig ist, warum Formulare Fragen stellen, die sie selbst beantworten, und wie die Bahn Verspätungen künftig nennt.",
-            "description_html": "<p>Zuständigkeiten, Formulare und die Bahn: Max und Tobias nehmen die Woche auseinander.</p><ul><li>Blitzlicht: neue Begriffe für Verspätungen</li><li>Hauptthema: Wer ist eigentlich zuständig?</li></ul><p>Mehr unter <a href=\"https://example.org/uebel\">example.org/uebel</a>.</p>",
+            "description_html": "<p>Zuständigkeiten, Formulare und die Bahn: Max und Tobias nehmen die Woche auseinander.</p><ul><li>Blitzlicht: neue Begriffe für Verspätungen</li><li>Hauptthema: Wer ist eigentlich zuständig?</li></ul><p>Mehr unter <a href=\"https://example.org/zwei-am-mikro\">example.org/zwei-am-mikro</a>.</p>",
             "chapter_titles": {ev["blitz"]: "Blitzlicht: Bahn und Begriffe", ev["marker"]: "Hauptthema: Zuständigkeit"},
         }
         db.run("INSERT INTO episodes(id,status,source,number,season,title,summary,description_html,explicit,episode_type,guid,created_at,rec_start_server_ms,rec_stop_server_ms,duration_ms,"

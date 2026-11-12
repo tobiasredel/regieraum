@@ -185,3 +185,25 @@ def test_prompt_asks_for_we_perspective():
     from publish import shownotes
 
     assert "Wir-Form" in shownotes.SYSTEM and "nie in der dritten Person" in shownotes.SYSTEM
+
+
+LINKS = [{"url": "https://buch.example/regime-change?x=1&y=2", "title": "Regime Change (Haberman)"},
+         {"url": "https://podcast.example/ezra", "title": ""}]
+
+
+def test_host_links_are_in_prompt_kept_and_appended_when_missing():
+    # Prompt: eigener Block und Regel, auch ohne Erwähnung im Transkript
+    system, user = build_prompt(TRANSCRIPT, show(), CHAPTERS, [], links=LINKS)
+    assert "<empfehlungen_des_hosts>" in user and "https://podcast.example/ezra" in user and "Empfehlungen des Hosts" in system
+    # das Modell setzt einen Link, vergisst den zweiten: der erste bleibt (nicht im Transkript, aber vom Host), der zweite kommt dazu
+    data = {**GOOD, "description_html": '<p>Einstieg</p><p><strong>Unsere Good Reads</strong></p><ul><li><a href="https://buch.example/regime-change?x=1&amp;y=2">Regime Change</a></li></ul>'}
+    r = suggest(TRANSCRIPT, show(), CHAPTERS, [], client=Fake(reply(data)), links=LINKS)
+    html = r["description_html"]
+    assert html.count("buch.example/regime-change") == 1  # nicht doppelt, obwohl & im HTML als &amp; steht
+    assert 'href="https://podcast.example/ezra"' in html and "Unsere Empfehlungen" in html
+    assert "erfunden.example" not in html  # fremde Links werden weiter entfernt
+
+
+def test_without_links_no_block():
+    system, user = build_prompt(TRANSCRIPT, show(), CHAPTERS, [])
+    assert "<empfehlungen_des_hosts>" not in user and "Empfehlungen des Hosts" not in system

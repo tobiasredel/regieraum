@@ -535,6 +535,11 @@ class EdlBody(BaseModel):
     cuts: list[Cut] = Field(default_factory=list, max_length=500)
 
 
+class LinkItem(BaseModel):
+    url: str = Field(max_length=1000)
+    title: str = Field(default="", max_length=200)
+
+
 class EpisodePatch(BaseModel):
     label: str | None = Field(default=None, max_length=120)  # Arbeitstitel einer Vorbereitung
     title: str | None = Field(default=None, max_length=300)
@@ -546,6 +551,7 @@ class EpisodePatch(BaseModel):
     episode_type: Literal["full", "trailer", "bonus"] | None = None
     edl: EdlBody | None = None
     chapter_titles: dict[str, str] | None = None
+    links: list[LinkItem] | None = Field(default=None, max_length=10)  # Good Reads und Links für den Vorschlag
 
 
 @router.patch("/episodes/{episode_id}")
@@ -569,6 +575,14 @@ def episode_patch(episode_id: str, body: EpisodePatch, request: Request) -> dict
                             (fields["number"], episode_id, fields.get("season", ep["season"])))
         if dup:
             raise ApiError(409, "number_taken", "Die Folgennummer {number} ist schon vergeben", number=fields["number"])
+    if body.links is not None:
+        links = []
+        for it in body.links:
+            url, title = it.url.strip(), it.title.strip()
+            if not re.fullmatch(r"https?://[^\s<>\"']+", url, re.I):
+                raise ApiError(422, "invalid", "Jeder Link braucht eine Adresse mit https:// oder http://")
+            links.append({"url": url, "title": title})
+        fields["links"] = links
     if body.edl is not None:
         fields["edl"] = core.normalize_edl(body.edl.model_dump())
     if body.chapter_titles is not None:
