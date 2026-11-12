@@ -477,6 +477,12 @@ Stufe 1, je Spur:
 3. Verbessern: Hochpass 80 Hz, Rauschunterdrückung mit `deep-filter` (Stufen `off`, `leicht`, `normal`, `stark` über die
    Dämpfungsgrenze), De-Esser, sanfte Kompression, Pegelangleich je Sprecher (gleiche Sprach-Lautheit für alle Stems,
    gemessen nur über Sprachanteile), Begrenzer.
+3b. Klangfarbe und Pausen (wenn `audio.tone`, Standard an; `pipeline/tone.py`, Ergänzung 12.11.2026): je Stem nach dem
+   Rendern ein sanfter Expander (Schwelle 10 dB über dem Grundgeräusch der Pausen, 1:4, höchstens 18 dB) und eine
+   Korrekturkurve zum Sprachspektrum einer Zielkurve (Terzbänder 100 Hz bis 10 kHz, geglättet, höchstens ±5 dB, Median 0).
+   Anlass: eingebaute Mikrofone klingen dünn und topfig. Die Filterverzögerung (10 ms) wird abgeschnitten, damit die
+   Stems synchron bleiben; die Sprach-Lautheit wird auf den Wert davor zurückgesetzt. Der Bericht nennt je Stem Kurve,
+   Grundgeräusch und Schwelle (`stems[].tone`). Prüfung: `tests/test_pipeline_tone.py`.
 4. Crossgate (wenn `audio.crossgate`): Spricht nur eine Person, wird das Übersprechen in den anderen Stems abgesenkt
    (höchstens 15 dB, weiche Flanken, kein hörbares Pumpen). Das ist der Schutz für Aufnahmen ohne Kopfhörer.
 

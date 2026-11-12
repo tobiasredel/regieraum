@@ -34,7 +34,7 @@ DEFAULT_SHOW = {
     "cover_key": None,
 }
 DEFAULT_ARCHIVE = {"after_days": 14}  # Rohdaten ins Archiv, so viele Tage nach dem Veröffentlichen (0 = sofort)
-DEFAULT_AUDIO = {"target_lufs": -16, "true_peak_db": -1.0, "denoise": "normal", "crossgate": True, "mp3_kbps": 160}
+DEFAULT_AUDIO = {"target_lufs": -16, "true_peak_db": -1.0, "denoise": "normal", "crossgate": True, "tone": True, "mp3_kbps": 160}
 
 
 # Show-Profil: wer spricht und in welchem Ton (für Vorbereitung, Begleiter, Shownotes und die Oberfläche)

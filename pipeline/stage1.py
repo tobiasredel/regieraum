@@ -7,7 +7,7 @@ from pathlib import Path
 
 import soundfile as sf
 
-from . import SR, align, assemble, enhance
+from . import SR, align, assemble, enhance, tone
 from .util import PipelineError, Progress, Warnings, r1, read_json, write_json
 
 
@@ -147,16 +147,20 @@ def run(m: dict, prog: Progress) -> dict:
     for j, st in enumerate(stems):
         p_r(j / k, f"Stimme {j + 1} von {k} wird gerendert")
         dst = stems_dir / f"{st['pid']}.flac"
-        lim = enhance.render(st["src"], st, stems_dir / f"{st['pid']}.gain.wav", dst, p_r.sub(j / k, (j + 0.8) / k))
+        lim = enhance.render(st["src"], st, stems_dir / f"{st['pid']}.gain.wav", dst, p_r.sub(j / k, (j + 0.7) / k))
         st["src"].unlink(missing_ok=True)
+        speech_ms = enhance.speech_intervals(st["own_mask"])
+        tone_info = None
+        if audio.get("tone", True):
+            p_r((j + 0.7) / k, f"Stimme {j + 1} von {k}: Klangfarbe und Pausen")
+            tone_info = tone.apply(dst, speech_ms, stems_dir / f"tmp_tone_{st['pid']}")
         an_after = enhance.analyze_file(dst, p_r.sub((j + 0.8) / k, (j + 1) / k), keys=("eK", "eS"))
         summ = enhance.summarize(st, an_after)
         summ.update(participant_id=st["pid"], participant_name=st["name"], path=str(dst),
                     lufs_integrated_before=r1(st["lufs_in"]), limiter=lim,
-                    gaps_ms=[[_ms(a), _ms(b)] for a, b in st["gaps"]])
+                    gaps_ms=[[_ms(a), _ms(b)] for a, b in st["gaps"]], tone=tone_info)
         out_stems.append(summ)
-        write_json(stems_dir / f"{st['pid']}.speech.json",
-                   {"hop_ms": 1, "speech_ms": enhance.speech_intervals(st["own_mask"])})
+        write_json(stems_dir / f"{st['pid']}.speech.json", {"hop_ms": 1, "speech_ms": speech_ms})
         st.pop("an", None)
         lap("rendern")
 

@@ -695,5 +695,8 @@
   "Weitere Spuren": "Further tracks",
   "Good Reads und Links": "Good reads and links",
   "Eine Zeile je Link, ein Titel davor ist möglich. Der Vorschlag nimmt sie immer in die Shownotes auf, auch wenn sie im Gespräch nicht genannt wurden": "One link per line, a title before it is optional. The suggestion always puts them in the show notes, even if they were not mentioned in the conversation",
-  "Regime Change (Haberman) – https://…": "Regime Change (Haberman) – https://…"
+  "Regime Change (Haberman) – https://…": "Regime Change (Haberman) – https://…",
+  "Klangfarbe": "Tone",
+  "Klangfarbe angleichen und Pausen beruhigen": "Match the tone and calm the pauses",
+  "Gleicht je Person die Klangfarbe an eine Zielkurve für Sprache an: mehr Fülle, weniger topfiger Klang, wie ihn eingebaute Mikrofone haben, höchstens 5 dB. Zwischen den Sätzen wird das Grundgeräusch leiser.": "Matches each person's tone to a target curve for speech: more body, less of the boxy sound built-in microphones have, at most 5 dB. Background noise between sentences gets quieter."
 }

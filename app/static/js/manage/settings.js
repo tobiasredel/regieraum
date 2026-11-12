@@ -252,6 +252,7 @@ function audioSection() {
   const a = settings.audio;
   const lufs = input("number", a.target_lufs, { step: "0.5", min: "-30", max: "-10", inputmode: "decimal" });
   const crossgate = h("input", { type: "checkbox", checked: !!a.crossgate, id: "m-crossgate" });
+  const tone = h("input", { type: "checkbox", checked: a.tone !== false, id: "m-tone" });
   const rates = [96, 128, 160, 192, 256, 320];
   if (!rates.includes(a.mp3_kbps)) rates.push(a.mp3_kbps);
   rates.sort((x, y) => x - y);
@@ -265,7 +266,7 @@ function audioSection() {
     if (Number.isNaN(v) || v < -30 || v > -10) { state.textContent = t("Die Ziel-Lautheit muss zwischen −30 und −10 LUFS liegen"); state.className = "m-save-state tr-status-error"; return; }
     const dn = radios.querySelector("input:checked")?.value || "normal";
     try {
-      settings = await api("/settings", { method: "PUT", json: { audio: { target_lufs: v, denoise: dn, crossgate: crossgate.checked, mp3_kbps: parseInt(kbps.value, 10) } } });
+      settings = await api("/settings", { method: "PUT", json: { audio: { target_lufs: v, denoise: dn, crossgate: crossgate.checked, tone: tone.checked, mp3_kbps: parseInt(kbps.value, 10) } } });
       state.textContent = t("Gespeichert");
       state.className = "m-save-state tr-status-ok";
     } catch (e) {
@@ -278,6 +279,9 @@ function audioSection() {
     field(t("Ziel-Lautheit in LUFS"), lufs, { hint: t("−16 LUFS ist der übliche Podcast-Wert, Spotify empfiehlt −14. Je höher der Wert, desto lauter die Folge.") }),
     h("div", { class: "tr-field m-field" }, h("span", { class: "tr-label", id: "m-dn-label" }, t("Rauschunterdrückung")), radios,
       h("p", { class: "tr-small m-hint" }, t("Je stärker die Stufe, desto mehr Rauschen verschwindet, desto eher können Stimmen dünner klingen"))),
+    h("div", { class: "tr-field m-field" }, h("span", { class: "tr-label" }, t("Klangfarbe")),
+      h("label", { class: "m-check", for: "m-tone" }, tone, h("span", null, t("Klangfarbe angleichen und Pausen beruhigen"))),
+      h("p", { class: "tr-small m-hint" }, t("Gleicht je Person die Klangfarbe an eine Zielkurve für Sprache an: mehr Fülle, weniger topfiger Klang, wie ihn eingebaute Mikrofone haben, höchstens 5 dB. Zwischen den Sätzen wird das Grundgeräusch leiser."))),
     h("div", { class: "tr-field m-field" }, h("span", { class: "tr-label" }, "Crossgate"),
       h("label", { class: "m-check", for: "m-crossgate" }, crossgate, h("span", null, t("Übersprechen absenken"))),
       h("p", { class: "tr-small m-hint" }, t("Spricht nur eine Person, wird das Übersprechen in den Spuren der anderen abgesenkt, höchstens um 15 dB. Das schützt Aufnahmen ohne Kopfhörer."))),

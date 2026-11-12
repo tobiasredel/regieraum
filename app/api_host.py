@@ -230,6 +230,7 @@ class AudioPatch(BaseModel):
     true_peak_db: float | None = Field(default=None, ge=-6, le=0)
     denoise: Literal["off", "leicht", "normal", "stark"] | None = None
     crossgate: bool | None = None
+    tone: bool | None = None  # Klangfarbe angleichen und Pausen beruhigen (pipeline/tone.py)
     mp3_kbps: int | None = Field(default=None, ge=64, le=320)
 
 

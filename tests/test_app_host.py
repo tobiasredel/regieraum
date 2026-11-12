@@ -78,7 +78,7 @@ def test_played_sound_is_archived_not_deleted(client, app):
 # --- Einstellungen ----------------------------------------------------------------------------------
 def test_settings_and_cover(client, app):
     cur = client.get("/api/host/settings").json()
-    assert cur["audio"] == {"target_lufs": -16, "true_peak_db": -1.0, "denoise": "normal", "crossgate": True, "mp3_kbps": 160}
+    assert cur["audio"] == {"target_lufs": -16, "true_peak_db": -1.0, "denoise": "normal", "crossgate": True, "tone": True, "mp3_kbps": 160}
     assert cur["show"]["title"] == "Mein Podcast" and cur["show"]["cover_key"] is None
     r = client.put("/api/host/settings", json={"show": {"owner_email": "a@b.de"}, "audio": {"target_lufs": -18, "denoise": "stark"}})
     assert r.json()["show"]["owner_email"] == "a@b.de" and r.json()["audio"]["target_lufs"] == -18
