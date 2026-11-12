@@ -334,7 +334,7 @@ POST   /preparations {label?}                    neue Vorbereitung mit Standardp
 PUT    /studio/preparation {episode_id|null}     worauf die nächste Aufnahme aufbaut (null: ohne Vorbereitung)
 POST   /episodes/{id}/process          Verarbeitung komplett neu
 POST   /episodes/{id}/remix            nur Mischung und Encoding neu (nach Schnitt oder Titeländerung)
-POST   /episodes/{id}/suggest          Shownotes-Vorschlag neu
+POST   /episodes/{id}/suggest          Shownotes-Vorschlag neu; ohne Transkript erst Transkription (kind: transcribe), Vorschlag folgt
 POST   /episodes/{id}/publish {publish_at?}       ohne publish_at sofort
 POST   /episodes/{id}/unpublish
 GET    /episodes/{id}/audio/{which}    which: mix (ungeschnitten, zum Schneiden) | episode (fertig) ; Range-fähig
@@ -681,7 +681,7 @@ Rahmen `tr-shell` mit Seitenleiste: Studio, Folgen, Soundboard, Einstellungen.
 - Folgen: Liste mit Status als Text, Dauer, Datum. Laufende Verarbeitung mit Fortschritt.
 - Folge prüfen: Player der fertigen Folge, Wellenform der ungeschnittenen Mischung mit Kapitelmarken, Trimmen an beiden
   Enden, Bereiche markieren und herausschneiden (rückgängig machbar), „Neu mischen“. Titelvorschläge zum Anklicken,
-  Shownotes-Editor (einfaches HTML), Kapitel umbenennen, Folgennummer. Klangbericht in Klartext. Veröffentlichen sofort
+  Shownotes-Editor (einfaches HTML), Kapitel umbenennen, Folgennummer. Klangbericht in Klartext, eine Karte je Person (mehrere Spuren einer Person, etwa nach Gerätewechsel oder Unterbrechung, werden zusammengefasst: „Weitere Spuren ab 5:38“ und die Lücke dazwischen). Veröffentlichen sofort
   oder zu Datum und Uhrzeit. Rohspuren zum Herunterladen.
 - Soundboard: Dateien hochladen, Bezeichnung, Art, Kapiteltitel, Lautstärke, Ausblendzeit, Taste, Reihenfolge, Vorhören.
 - Einstellungen: Show-Daten und Cover, Klang (Ziel-Lautheit, Rauschunterdrückung, Crossgate), Einladungslinks

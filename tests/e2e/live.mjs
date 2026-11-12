@@ -60,6 +60,9 @@ async function main() {
   check(cur && /Heizungsgesetz/.test(cur.text) && /seit \d+:\d\d/.test(cur.text), `aktueller Abschnitt mit Laufzeit: „${cur && cur.text}“`);
 
   // Dossier ohne Klappen, Abhaken durch den Begleiter und von Hand
+  // lange Quellentitel (echte Dossiers: über 100 Zeichen) dürfen den Text nicht zusammendrücken (Vorfall 2026-11-12)
+  const narrow = await host.evaluate(() => Math.min(...[...document.querySelectorAll(".ps-plan .ps-point")].filter((p) => p.offsetParent).map((p) => p.querySelector(".ps-point-text").getBoundingClientRect().width)));
+  check(narrow >= 150, `Dossier: kein Punkt schmaler als 150 px trotz langem Quellentitel (schmalster ${Math.round(narrow)} px)`);
   const dossier = await host.evaluate(() => ({ folds: document.querySelectorAll(".ps-plan details:not(.ps-more)").length, points: document.querySelectorAll(".ps-plan .ps-point").length, heads: [...document.querySelectorAll(".ps-plan .ps-group-head")].map((x) => x.textContent) }));
   check(dossier.folds === 0 && dossier.points >= 5 && dossier.heads.some((t) => t.startsWith("Fragen")) && dossier.heads.some((t) => t.startsWith("Fakten und Zahlen")), `Dossier ohne Klappen: ${dossier.points} Punkte sofort lesbar (${dossier.heads.join(" | ")})`);
   mock.send({ type: "assist.said", items: [{ segment_id: mock.state.current, art: "frage", nr: 1 }, { segment_id: mock.state.current, art: "zahl", nr: 1 }] });

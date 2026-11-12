@@ -33,10 +33,37 @@ function trackView(tr) {
   const drift = num(first(tr.drift_ppm, tr.clock?.drift_ppm));
   const offset = num(first(tr.start_offset_ms, tr.offset_ms, tr.clock?.start_offset_ms));
   const clips = num(first(tr.clip_events, tr.clips, tr.clipped));
-  return { name, before, after, gain, drift, offset, clips, gaps: gapInfo(tr) };
+  const range = Array.isArray(tr.session_range_ms) ? tr.session_range_ms.map(num) : [null, null];
+  return { key: first(tr.participant_id, name), name, before, after, gain, drift, offset, clips, gaps: gapInfo(tr), range };
+}
+
+/** Spuren einer Person zusammenfassen: Ein Gerätewechsel oder eine kurze Unterbrechung beginnt eine neue Spur,
+ *  im Bericht bleibt es eine Person. `splits`: Beginn jeder weiteren Spur und die Lücke davor (Sitzungszeit). */
+function personView(list) {
+  const sorted = [...list].sort((a, b) => (a.range[0] ?? 0) - (b.range[0] ?? 0));
+  const main = sorted.reduce((a, b) => ((b.range[1] ?? 0) - (b.range[0] ?? 0) > (a.range[1] ?? 0) - (a.range[0] ?? 0) ? b : a));
+  const sum = (k) => (sorted.every((x) => x[k] === null) ? null : sorted.reduce((n, x) => n + (x[k] || 0), 0));
+  const splits = sorted.slice(1).map((x, i) => {
+    const prevEnd = sorted[i].range[1], start = x.range[0];
+    return { at: start, gap: start !== null && prevEnd !== null ? Math.max(0, start - prevEnd) : null };
+  });
+  const gapsCount = sorted.every((x) => x.gaps.count === null) ? null : sorted.reduce((n, x) => n + (x.gaps.count || 0), 0);
+  const gapsMs = sorted.some((x) => x.gaps.ms) ? sorted.reduce((n, x) => n + (x.gaps.ms || 0), 0) : null;
+  return {
+    name: sorted[0].name, before: main.before, after: main.after, gain: main.gain,
+    drifts: sorted.map((x) => x.drift).filter((v) => v !== null), offset: sorted[0].offset,
+    clips: sum("clips"), gaps: { count: gapsCount, ms: gapsMs }, splits,
+  };
+}
+
+function groupPersons(tracks) {
+  const by = new Map();
+  for (const tr of tracks) { if (!by.has(tr.key)) by.set(tr.key, []); by.get(tr.key).push(tr); }
+  return [...by.values()].map(personView);
 }
 
 const lufs = (v) => (v === null ? "–" : t("{n} LUFS", { n: neg(v) }));
+const fmtGap = (ms) => (ms < 1000 ? t("{s} s", { s: fmtDec(ms / 1000) }) : fmtDuration(ms));
 
 export function renderReport(report, targetLufs = null) {
   const box = h("div", { class: "m-report" });
@@ -44,7 +71,7 @@ export function renderReport(report, targetLufs = null) {
     box.append(h("p", { class: "tr-small" }, t("Es liegt noch kein Klangbericht vor. Er entsteht bei der Verarbeitung.")));
     return box;
   }
-  const tracks = (Array.isArray(first(report.tracks, report.stems, report.speakers)) ? first(report.tracks, report.stems, report.speakers) : []).map(trackView);
+  const tracks = groupPersons((Array.isArray(first(report.tracks, report.stems, report.speakers)) ? first(report.tracks, report.stems, report.speakers) : []).map(trackView));
   const final = num(first(report.master?.verified?.lufs, report.final_lufs, report.lufs_after, report.loudness?.after_lufs, report.loudness?.lufs, report.final?.lufs, report.master?.lufs, report.loudness_after?.lufs, typeof report.loudness === "number" ? report.loudness : undefined));
   const peak = num(first(report.master?.verified?.true_peak_db, report.true_peak_db, report.final_true_peak_db, report.loudness?.true_peak_db, report.final?.true_peak_db, report.master?.true_peak_db));
   const target = num(first(report.master?.target_lufs, report.target_lufs, report.loudness?.target_lufs, targetLufs));
@@ -81,6 +108,12 @@ export function renderReport(report, targetLufs = null) {
   if (tracks.some((tr) => tr.clips !== null)) {
     lines.push(clipped.length ? t("Übersteuerungen: {items}.", { items: clipped.map((tr) => t("{name} {count}", { name: tr.name, count: fmtInt(tr.clips) })).join(", ") }) : t("Keine Übersteuerungen."));
   }
+  for (const p of tracks.filter((x) => x.splits.length)) {
+    lines.push(t("{name}: neue Spur bei {times}. Das Studio beginnt eine, wenn der Ton kurz aussetzt oder das Gerät wechselt; dazwischen fehlen {gap}.", {
+      name: p.name, times: p.splits.map((x) => fmtClock(x.at ?? 0)).join(", "),
+      gap: fmtGap(p.splits.reduce((n, x) => n + (x.gap || 0), 0)),
+    }));
+  }
   if (lines.length) {
     const ul = h("ul", { class: "m-plain" });
     lines.forEach((l) => ul.append(h("li", null, l)));
@@ -94,8 +127,9 @@ export function renderReport(report, targetLufs = null) {
         [t("Sprach-Lautheit vorher"), lufs(tr.before)],
         [t("Sprach-Lautheit nachher"), lufs(tr.after)],
         [t("Verstärkung"), tr.gain === null ? "–" : t("{n} dB", { n: signed(tr.gain) })],
-        [t("Drift"), tr.drift === null ? "–" : t("{n} ppm", { n: signed(tr.drift, 0) })],
-        [t("Startversatz"), tr.offset === null ? "–" : t("{n} ms", { n: fmtInt(tr.offset) })],
+        [t("Drift"), tr.drifts.length ? tr.drifts.map((d) => t("{n} ppm", { n: signed(d, 0) })).join(" · ") : "–"],
+        [t("Spurbeginn"), tr.offset === null ? "–" : tr.offset < 0 ? t("{s} s vor dem Start", { s: fmtDec(-tr.offset / 1000) }) : t("bei {time}", { time: fmtClock(tr.offset) })],
+        ...(tr.splits.length ? [[t("Weitere Spuren"), tr.splits.map((x) => t("ab {time}", { time: fmtClock(x.at ?? 0) })).join(", ")]] : []),
         [t("Lücken"), tr.gaps.count === null ? "–" : tr.gaps.count ? (tr.gaps.ms ? t("{count} ({duration})", { count: fmtInt(tr.gaps.count), duration: fmtDuration(tr.gaps.ms) || t("unter 1 s") }) : fmtInt(tr.gaps.count)) : t("keine")],
         [t("Übersteuerungen"), tr.clips === null ? "–" : tr.clips ? fmtInt(tr.clips) : t("keine")],
       ];

@@ -436,7 +436,12 @@ function renderSuggestions() {
       h("div", { class: "app-row" }, button(t("Vorschlag übernehmen"), { onclick: () => { m.notes.setHtml(ai.description_html); updateDirty(); renderSuggestions(); } })));
   }
   if (!ai.titles && !ai.summary && !ai.description_html) {
-    state.ui.titleSuggest.append(h("p", { class: "tr-small" }, t("Noch kein Vorschlag vorhanden. „Vorschlag neu erzeugen“ erstellt Titel, Kurzbeschreibung und Shownotes aus dem Transkript.")));
+    const failed = !state.ep.has_transcript && (state.ep.jobs || []).find((j) => j.kind === "transcribe" && j.status === "failed");
+    state.ui.titleSuggest.append(h("p", { class: "tr-small" }, state.ep.has_transcript || state.ep.source !== "recorded"
+      ? t("Noch kein Vorschlag vorhanden. „Vorschlag neu erzeugen“ erstellt Titel, Kurzbeschreibung und Shownotes aus dem Transkript.")
+      : failed
+        ? t("Es gibt kein Transkript, die Transkription ist fehlgeschlagen. „Vorschlag neu erzeugen“ erstellt erst das Transkript und dann den Vorschlag.")
+        : t("Es gibt noch kein Transkript. „Vorschlag neu erzeugen“ erstellt erst das Transkript und dann den Vorschlag.")));
   }
 }
 
@@ -444,8 +449,8 @@ async function suggestAgain() {
   const b = state.ui.bSuggest;
   b.disabled = true;
   try {
-    await api(`/episodes/${encodeURIComponent(id)}/suggest`, { method: "POST" });
-    toast(t("Vorschlag wird erzeugt"));
+    const res = await api(`/episodes/${encodeURIComponent(id)}/suggest`, { method: "POST" });
+    toast(res.kind === "transcribe" ? t("Erst entsteht das Transkript, das dauert einige Minuten. Der Vorschlag folgt danach von selbst") : t("Vorschlag wird erzeugt"));
     state.ep = await api(`/episodes/${encodeURIComponent(id)}`);
     watch();
     renderBanner();

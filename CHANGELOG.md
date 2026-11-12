@@ -14,6 +14,15 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 - Output device choice in the device check and the studio (Chrome, Edge; Firefox for voices only). Safari keeps
   the system output.
 
+### Fixed
+
+- Transcription failed in the Docker image: `faster-whisper` imports `requests`, which newer `huggingface_hub`
+  releases no longer bring along. Both are now pinned.
+- "Regenerate suggestion" did nothing without a transcript; it now creates the transcript first.
+- Long source titles squeezed the dossier text in broadcast mode to a few pixels; the source now shows the domain.
+- The sound report showed a person twice when the studio had started a second track; it now shows one card per
+  person with the start of further tracks.
+
 ### Changed
 
 - With the show site on, every feed entry links to its own episode page, also for imported episodes that still

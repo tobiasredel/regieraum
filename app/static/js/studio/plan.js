@@ -330,11 +330,13 @@ export class PlanColumn {
       blocks.push(h("p", { class: "ps-small" }, seg.status === "researching" ? t("Recherche läuft") : t("Kein Dossier für diesen Abschnitt")));
       return blocks;
     }
+    // Im Dossier der Aufnahme nur die Domain: Quellentitel sind oft über 100 Zeichen lang und nähmen der Zeile den Platz
+    // (der ganze Titel steht im Tooltip)
     const src = (url, title) => {
       if (!url) return null;
-      let host = title;
-      if (!host) { try { host = new URL(url, location.href).hostname.replace(/^www\./, ""); } catch { host = t("Quelle"); } }
-      return h("a", { href: url, target: "_blank", rel: "noopener noreferrer", class: "ps-source" }, host);
+      let host;
+      try { host = new URL(url, location.href).hostname.replace(/^www\./, ""); } catch { host = title || t("Quelle"); }
+      return h("a", { href: url, target: "_blank", rel: "noopener noreferrer", class: "ps-source", title: title || null }, host);
     };
     const point = (art, nr, text, extra) => {
       const key = `${seg.id}|${art}|${nr}`;

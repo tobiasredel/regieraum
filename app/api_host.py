@@ -513,6 +513,7 @@ def episode_get(episode_id: str, request: Request) -> dict:
     out["chapters_preview"] = core.chapters_preview(st.db, ep)
     out["notes"] = core.notes_of(st.db, ep)  # Merkpunkte für den Schnitt, Zeit in Sitzungszeit
     out["numbering"] = core.get_numbering(st.db)  # für die Vorschau des Feed-Titels
+    out["has_transcript"] = (st.cfg.episode_dir(episode_id) / "out" / "transcript.json").exists()
     out["costs"] = core.costs_of(st.db, episode_id)
     out["storage"] = {"local_bytes": archive.dir_bytes(st.cfg.episode_dir(episode_id)), "archived": bool(ep["archived_at"]),
                       "archive_available": st.cfg.archive_dir is not None}
@@ -724,11 +725,18 @@ def episode_remix(episode_id: str, request: Request) -> dict:
 
 @router.post("/episodes/{episode_id}/suggest")
 def episode_suggest(episode_id: str, request: Request) -> dict:
+    """Vorschlag aus dem Transkript. Fehlt das Transkript (z. B. weil die Transkription scheiterte), entsteht es zuerst;
+    der Vorschlag folgt danach von selbst (`kind: "transcribe"` in der Antwort)."""
     st = _st(request)
-    _episode_or_404(request, episode_id)
+    ep = _episode_or_404(request, episode_id)
     if not st.cfg.anthropic_key:
         raise ApiError(409, "no_ai", "Kein Schlüssel für Vorschläge eingerichtet")
-    return _job_response(request, jobs.enqueue(st.db, episode_id, "suggest"))
+    if not (st.cfg.episode_dir(episode_id) / "out" / "transcript.json").exists():
+        if ep["source"] != "recorded" or not (st.cfg.episode_dir(episode_id) / "out" / "episode.mp3").exists():
+            raise ApiError(409, "no_transcript", "Ohne Transkript gibt es keinen Vorschlag, und für diese Folge lässt sich keins erstellen")
+        _not_archived(ep)
+        return {**_job_response(request, jobs.enqueue(st.db, episode_id, "transcribe")), "kind": "transcribe"}
+    return {**_job_response(request, jobs.enqueue(st.db, episode_id, "suggest")), "kind": "suggest"}
 
 
 class PublishBody(BaseModel):

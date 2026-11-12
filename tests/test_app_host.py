@@ -552,3 +552,20 @@ def test_recording_uses_chosen_preparation_and_resets_choice(client, app, clock)
         assert m["episode_id"] == a["id"]
         assert core.get_episode(db, a["id"])["status"] == "recording" and core.studio_choice(db) == (False, None)
         assert core.get_episode(db, b["id"])["status"] == "draft"
+
+
+def test_suggest_without_transcript_transcribes_first(client, app, cfg):
+    import dataclasses
+
+    app.state.cfg = dataclasses.replace(cfg, anthropic_key="k")
+    eid, out = _make_episode(app, cfg, status="review")
+    r = client.post(f"/api/host/episodes/{eid}/suggest")
+    assert r.status_code == 409 and "no_transcript" in r.text  # weder Transkript noch fertige Folge
+    (out / "episode.mp3").write_bytes(b"ID3" + b"\x00" * 100)
+    r = client.post(f"/api/host/episodes/{eid}/suggest").json()
+    assert r["kind"] == "transcribe"  # das Transkript entsteht zuerst, der Vorschlag folgt im Job danach
+    assert client.get(f"/api/host/jobs/{r['job_id']}").json()["kind"] == "transcribe"
+    assert client.get(f"/api/host/episodes/{eid}").json()["has_transcript"] is False
+    (out / "transcript.json").write_text('{"segments": []}')
+    r = client.post(f"/api/host/episodes/{eid}/suggest").json()
+    assert r["kind"] == "suggest"

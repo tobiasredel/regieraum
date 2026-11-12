@@ -12,7 +12,7 @@ export const DOSSIER = {
   lage: "Testinhalt für die Darstellung. Drei Sätze Lage, damit die Spalte wie im Ernstfall gefüllt ist. Der dritte Satz ist etwas länger, um den Umbruch in schmalen Spalten zu prüfen.",
   fakten: [
     { text: "Erste Tatsache mit Quelle, ausreichend lang für zwei Zeilen in der Spalte", quelle_titel: "Beispielquelle", quelle_url: "https://example.org/a", datum: "2026-11-08" },
-    { text: "Zweite Tatsache", quelle_titel: "Zweite Quelle", quelle_url: "https://example.org/b", datum: "2026-11-09" },
+    { text: "Zweite Tatsache", quelle_titel: "RZP, Shas recommend Netanyahu in mandate talks with Herzog, Yisrael Beytenu backs Eisenkot (Example Times)", quelle_url: "https://www.example.org/b", datum: "2026-11-09" },
   ],
   zahlen: [{ text: "12,5 % mehr als im Vorjahr", quelle_url: "https://example.org/c" }],
   positionen: [{ wer: "Verband A", position: "dafür" }, { wer: "Verband B", position: "dagegen" }],

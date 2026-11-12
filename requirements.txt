@@ -11,6 +11,9 @@ soundfile==0.13.0
 pyloudnorm==0.1.1
 mutagen==1.47.0
 faster-whisper==1.1.1
+# faster-whisper importiert requests, ohne es zu verlangen; huggingface_hub ab 1.0 bringt es nicht mehr mit
+huggingface_hub==0.27.1
+requests==2.32.3
 soxr==1.1.0
 # --- Veröffentlichung (publish/) ---
 boto3==1.35.90

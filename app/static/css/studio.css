@@ -326,7 +326,7 @@ button.ps-point-text{cursor:pointer}
 button.ps-point-text:focus-visible{outline:none;box-shadow:var(--focus)}
 .ps-point.is-said .ps-point-text{color:var(--slate);text-decoration:line-through;text-decoration-color:var(--muted)}
 .ps-point-state{flex:none;font-size:var(--fs-small);color:var(--success)}
-.ps-point .ps-source{flex:none;color:var(--slate)}
+.ps-point .ps-source{flex:0 1 auto;max-width:33%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--slate)}
 .ps-point .ps-source:hover{color:var(--ink)}
 .ps-werk{margin:0 0 var(--space-2)}
 .ps-more>.ps-group-head{margin-top:var(--space-3)}

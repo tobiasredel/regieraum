@@ -683,5 +683,14 @@
   "Von Hand": "Manual",
   "Vorschau": "Preview",
   "Vorschau wird geladen": "Loading preview",
-  "{year} · Folge {n}": "{year} · Episode {n}"
+  "{year} · Folge {n}": "{year} · Episode {n}",
+  "ab {time}": "from {time}",
+  "bei {time}": "at {time}",
+  "Erst entsteht das Transkript, das dauert einige Minuten. Der Vorschlag folgt danach von selbst": "The transcript comes first, which takes a few minutes. The suggestion follows on its own",
+  "Es gibt kein Transkript, die Transkription ist fehlgeschlagen. „Vorschlag neu erzeugen“ erstellt erst das Transkript und dann den Vorschlag.": "There is no transcript, the transcription failed. “Regenerate suggestion” creates the transcript first and then the suggestion.",
+  "Es gibt noch kein Transkript. „Vorschlag neu erzeugen“ erstellt erst das Transkript und dann den Vorschlag.": "There is no transcript yet. “Regenerate suggestion” creates the transcript first and then the suggestion.",
+  "{name}: neue Spur bei {times}. Das Studio beginnt eine, wenn der Ton kurz aussetzt oder das Gerät wechselt; dazwischen fehlen {gap}.": "{name}: new track at {times}. The studio starts one when the sound drops out briefly or the device changes; {gap} is missing in between.",
+  "Spurbeginn": "Track start",
+  "{s} s vor dem Start": "{s} s before the start",
+  "Weitere Spuren": "Further tracks"
 }
