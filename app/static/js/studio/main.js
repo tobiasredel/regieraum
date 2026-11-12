@@ -21,7 +21,7 @@ const TEST = P.get("testsignal"); // "1"/"server" oder "local"
 const S = {
   role: ROLE, token: null, me: null, room: null, ctx: null, audioClock: null, clock: new C.ServerClock(), store: null,
   recorder: null, mesh: null, jingles: null, socket: null, plan: null,
-  mic: null, rtcAudio: null, micId: null, outId: "", outLabel: "", outChecked: false, headphones: !isMobile(), mobile: isMobile(), cam: false, camStream: null,
+  mic: null, rtcAudio: null, micId: null, outId: "", outLabel: "", outChecked: false, micWanted: null, outWanted: null, headphones: !isMobile(), mobile: isMobile(), cam: false, camStream: null,
   muted: false, peerMeter: new Map(), progress: new Map(), media: new Map(), localMeter: null,
   stopped: null, wakeLock: null, wasHidden: false, entered: false, fatal: null, lastStatus: null,
 };
@@ -319,6 +319,7 @@ async function enterStudio() {
   }
   await S.recorder.init(S.ctx, S.audioClock);
   S.recorder.attach(S.mic, { headphones: S.headphones, device_label: micLabel(), test_signal: TEST || undefined });
+  watchMic(S.mic);
   wireRecorder();
   if (S.recovering) toast(S.recovering === 1 ? t("Eine unterbrochene Spur wird nachgeladen") : t("{n} unterbrochene Spuren werden nachgeladen", { n: S.recovering }));
 
@@ -345,7 +346,7 @@ async function enterStudio() {
   window.addEventListener("online", () => { S.socket.kick(); S.recorder.pump(true); S.mesh.nudge(); });
   document.addEventListener("visibilitychange", onVisibility);
   document.addEventListener("keydown", onKey);
-  navigator.mediaDevices.addEventListener && navigator.mediaDevices.addEventListener("devicechange", () => refreshDeviceSelect());
+  navigator.mediaDevices.addEventListener && navigator.mediaDevices.addEventListener("devicechange", () => onDeviceChange());
   setInterval(tick, 250);
 }
 
@@ -507,21 +508,22 @@ async function setMuted(on) {
   renderSelf();
 }
 
-async function switchMic({ deviceId, headphones }) {
+async function switchMic({ deviceId, headphones, persist = true }) {
   const R = S.recorder;
   if (deviceId !== undefined) S.micId = deviceId;
   if (headphones !== undefined) S.headphones = headphones;
-  Id.prefs.save({ micId: S.micId, headphones: S.headphones });
+  if (persist) { Id.prefs.save({ micId: S.micId, headphones: S.headphones }); if (deviceId !== undefined) S.micWanted = null; }
   let stream;
   try {
     stream = TEST ? Media.testSignal(S.clock, TEST === "local" ? "local" : "server") : await Media.getMic(S.micId, S.headphones);
-  } catch (e) { toast(Media.mediaError(e), 6000); renderSelf(); return; }
+  } catch (e) { toast(Media.mediaError(e), 6000); renderSelf(); return false; }
   const old = S.mic;
   const ep = S.room && S.room.episode;
   // Umschalten beginnt eine neue Spur (SPEC Abschnitt 8)
   if (R.track) R.finishActive("device");
   S.mic = stream;
   R.attach(stream, { headphones: S.headphones, device_label: micLabel(), test_signal: TEST || undefined });
+  watchMic(stream);
   R.setMute(S.muted);
   const oldRtc = S.rtcAudio;
   S.rtcAudio = stream.getAudioTracks()[0].clone();
@@ -532,6 +534,7 @@ async function switchMic({ deviceId, headphones }) {
   if (ep && ep.status === "recording") R.ensureTrack(ep.id, null);
   sendState();
   renderSelf();
+  return true;
 }
 
 async function setCam(on) {
@@ -551,11 +554,82 @@ async function refreshDeviceSelect() {
   fill(UI.micSel, mics.map((d, i) => h("option", { value: d.deviceId, selected: d.deviceId === S.micId }, d.label || t("Mikrofon {n}", { n: i + 1 }))));
 }
 
+// ---------------------------------------------------------------------- Ausfall von Mikrofon oder Ausgang
+// Fällt das Mikrofon weg (Kabel, Bluetooth), endet seine Spur. Das Studio nimmt dann mit dem Standardmikrofon weiter auf
+// (neue Spur, Bisheriges bleibt) und kehrt von selbst zurück, sobald das Gerät wieder da ist. Fällt der gewählte Ausgang
+// weg, gilt bis zur Rückkehr der Systemstandard. Die gespeicherte Wahl bleibt dabei die ursprüngliche.
+function watchMic(stream) {
+  const track = stream && stream.getAudioTracks()[0];
+  if (!track || TEST) return;
+  track.addEventListener("ended", () => { if (S.mic === stream) micLost(track.label); });
+  // vom System angehalten (anderes Programm, Unterbrechung): melden, wenn es länger als einen Moment dauert
+  track.addEventListener("mute", () => {
+    clearTimeout(S.micMuteTimer);
+    S.micMuteTimer = setTimeout(() => { if (S.mic === stream && track.muted) showBanner(t("Vom Mikrofon kommt gerade kein Ton. Das System hat es angehalten, vielleicht nutzt es ein anderes Programm"), "warn", 10000); }, 2000);
+  });
+  track.addEventListener("unmute", () => clearTimeout(S.micMuteTimer));
+}
+
+const sameDevice = (list, want) => want && (list.find((d) => d.deviceId === want.id) || (want.label && list.find((d) => d.label === want.label)));
+
+async function micLost(label) {
+  if (S.micLosing) return;
+  S.micLosing = true;
+  try {
+    if (!S.micWanted) S.micWanted = { id: S.micId, label };
+    const { mics } = await Media.listDevices().catch(() => ({ mics: [] }));
+    // „Standard – <Gerät>“ zeigt kurz nach dem Abziehen noch auf das alte Gerät
+    const left = mics.filter((d) => d.deviceId && !(label && d.label.includes(label)));
+    const next = left.find((d) => d.deviceId === "default") || left[0];
+    const name = label || t("Mikrofon");
+    if (!next) { showBanner(t("Das Mikrofon „{name}“ ist weg und es gibt kein anderes. Bitte ein Mikrofon anschließen", { name }), "error"); return; }
+    if (!(await switchMic({ deviceId: next.deviceId, persist: false }))) return;
+    showBanner(t("Das Mikrofon „{name}“ ist weg. Aufgenommen wird jetzt mit „{other}“, bis es wieder da ist", { name, other: micLabel() }), "warn");
+  } finally { S.micLosing = false; }
+}
+
+async function onDeviceChange() {
+  await refreshDeviceSelect();
+  if (TEST) return;
+  const { mics } = await Media.listDevices().catch(() => ({ mics: [] }));
+  const back = sameDevice(mics, S.micWanted);
+  if (back) {
+    await switchMic({ deviceId: back.deviceId });
+    showBanner(t("Das Mikrofon „{name}“ ist wieder da und nimmt wieder auf", { name: back.label || t("Mikrofon") }), "info", 10000);
+  } else {
+    const cur = S.mic && S.mic.getAudioTracks()[0];
+    if (cur && cur.readyState === "ended") await micLost(cur.label); // kein „ended“ bekommen, oder kein Ersatz war da
+  }
+  await checkOutput();
+}
+
+async function checkOutput() {
+  if (!Out.elementSupported() || !S.outChecked) return;
+  const outs = await Out.listOutputs().catch(() => []);
+  if (!S.outWanted && S.outId && !sameDevice(outs, { id: S.outId, label: S.outLabel })) {
+    S.outWanted = { id: S.outId, label: S.outLabel };
+    S.outId = "";
+    for (const m of S.media.values()) await Out.setElement(m.audio, "");
+    if (S.ctx) await Out.setContext(S.ctx, ""); // auch während der Aufnahme: das Gerät ist ohnehin weg
+    if (UI.outSel) UI.outSel.value = "";
+    showBanner(t("Der Ausgang „{name}“ ist weg. Der Ton kommt jetzt über den Systemstandard, bis er wieder da ist", { name: S.outWanted.label || t("Ausgang") }), "warn");
+    return;
+  }
+  const back = sameDevice(outs, S.outWanted);
+  if (back) {
+    S.outWanted = null;
+    await setOutput(back.deviceId, true);
+    if (UI.outSel) UI.outSel.value = back.deviceId;
+    showBanner(t("Der Ausgang „{name}“ ist wieder da", { name: back.label || t("Ausgang") }), "info", 10000);
+  }
+}
+
 // ---------------------------------------------------------------------- Ausgang
 /** Ausgang wählen: Stimmen sofort, Jingles und Testton über den AudioContext. Der Context wechselt nie während einer
  *  Aufnahme (der Rekorder hängt an ihm; ein Gerätewechsel kann dort eine Lücke reißen), sondern danach. */
 async function setOutput(id, inStudio = false) {
   S.outId = id || "";
+  S.outWanted = null;
   S.outChecked = true;
   const dev = S.outId ? (await Out.listOutputs().catch(() => [])).find((d) => d.deviceId === S.outId) : null;
   S.outLabel = dev ? dev.label : "";

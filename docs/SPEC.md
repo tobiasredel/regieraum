@@ -412,6 +412,15 @@ Zwei Seiten, ein gemeinsamer Kern: `/studio` (Host) und `/join/<token>` (Gast, z
   Ende, ein Hinweis sagt das. Gespeichert werden ID und Name des Geräts (`ps.prefs`), weil sich Geräte-IDs ändern können
   (Safari, gelöschte Website-Daten); fehlt die ID, wird das Gerät über den Namen wiedergefunden, sonst gilt der
   Systemstandard. Code: `app/static/js/studio/output.js`. Prüfung: `tests/e2e/output.mjs`.
+- Ausfall eines Geräts (Ergänzung 12.11.2026): Endet die Mikrofonspur (Kabel gezogen, Bluetooth weg; Ereignis `ended`
+  oder beim nächsten `devicechange` `readyState == "ended"`), wechselt das Studio auf das Standardmikrofon, sonst auf
+  das erste andere (Einträge, deren Name den des alten Geräts enthält, zählen nicht: „Standard – <Gerät>“ zeigt kurz
+  noch darauf). Wie jeder Wechsel beginnt das eine neue Spur. Ein Banner nennt beide Geräte. Ist kein anderes da,
+  sagt ein Banner das. Kommt das Gerät zurück (gleiche ID oder gleicher Name), wechselt das Studio von selbst zurück. Die
+  gespeicherte Wahl (`ps.prefs`) bleibt währenddessen das ursprüngliche Gerät. `mute` der Spur länger als 2 s (vom
+  System angehalten) meldet ein Banner, ohne zu wechseln. Fällt der gewählte Ausgang weg, gehen Stimmen und Jingles
+  sofort auf den Systemstandard, auch während der Aufnahme (das Gerät ist ohnehin weg), und kehren mit dem Gerät zurück
+  (Jingles dann nach der Aufnahme). Prüfung: `tests/e2e/failover.mjs` (Abziehen simuliert).
 - Handy und Tablet: Screen Wake Lock während der Aufnahme. Der Gerätecheck rät vorab, das Studio im Vordergrund zu
   lassen, den Bildschirm nicht zu sperren und ein Ladekabel zu nutzen. Kommt die Seite aus dem Hintergrund zurück,
   steht bei Host und Gast eine Warnung mit derselben Anweisung; auf Handy und Tablet bleibt sie stehen, bis sie

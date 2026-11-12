@@ -263,5 +263,11 @@
   "Anderen Ausgang wählen": "Choose another output",
   "Der Ton kommt über den Ausgang, der im System eingestellt ist": "Sound plays through the output set in your system",
   "Jingles und Testton kommen in diesem Browser über den Standardausgang des Systems": "In this browser, jingles and the test tone play through the system's default output",
-  "Jingles wechseln den Ausgang nach der Aufnahme": "Jingles switch to this output after the recording"
+  "Jingles wechseln den Ausgang nach der Aufnahme": "Jingles switch to this output after the recording",
+  "Vom Mikrofon kommt gerade kein Ton. Das System hat es angehalten, vielleicht nutzt es ein anderes Programm": "No sound is coming from the microphone right now. The system has paused it, perhaps another program is using it",
+  "Das Mikrofon „{name}“ ist weg und es gibt kein anderes. Bitte ein Mikrofon anschließen": "The microphone “{name}” is gone and there is no other. Please connect a microphone",
+  "Das Mikrofon „{name}“ ist weg. Aufgenommen wird jetzt mit „{other}“, bis es wieder da ist": "The microphone “{name}” is gone. Recording now uses “{other}” until it is back",
+  "Das Mikrofon „{name}“ ist wieder da und nimmt wieder auf": "The microphone “{name}” is back and recording again",
+  "Der Ausgang „{name}“ ist weg. Der Ton kommt jetzt über den Systemstandard, bis er wieder da ist": "The output “{name}” is gone. Sound now plays through the system default until it is back",
+  "Der Ausgang „{name}“ ist wieder da": "The output “{name}” is back"
 }
