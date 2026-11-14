@@ -27,6 +27,8 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 - Long source titles squeezed the dossier text in broadcast mode to a few pixels; the source now shows the domain.
 - The sound report showed a person twice when the studio had started a second track; it now shows one card per
   person with the start of further tracks.
+- On the sound board, between about 440 and 540 px wide, the sound name shrank to a few pixels next to the
+  buttons and showed one letter per line; the buttons now move below the name.
 
 ### Changed
 
