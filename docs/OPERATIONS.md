@@ -147,6 +147,7 @@ AI is optional. Without keys the studio, the audio pipeline and the feed work as
 |---|---|---|
 | `ANTHROPIC_API_KEY` | research dossiers (with web search), live hints, show notes | no dossiers, hints or show note suggestions |
 | `OPENAI_API_KEY` | live transcript for the companion | the live companion stays off |
+| `OPENAI_BASE_URL` | OpenAI-compatible gateway for the live transcript | `https://api.openai.com/v1` |
 
 Models can be changed with `PS_AI_MODEL` (show notes), `PS_AI_MODEL_PREP` (dossiers), `PS_AI_MODEL_LIVE` (live hints)
 and `PS_STT_MODEL` (live transcript). The transcript of the finished episode does not use an API: it runs locally with

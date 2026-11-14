@@ -23,6 +23,12 @@ DEFAULT_MODEL = "gpt-transcribe"
 API_URL = "https://api.openai.com/v1/audio/transcriptions"
 
 
+def api_url() -> str:
+    """Transkriptions-Endpunkt; ``OPENAI_BASE_URL`` lenkt auf ein OpenAI-kompatibles Gateway um."""
+    base = os.environ.get("OPENAI_BASE_URL", "").rstrip("/")
+    return f"{base}/audio/transcriptions" if base else API_URL
+
+
 @dataclass
 class Transcript:
     text: str
@@ -102,7 +108,7 @@ class OpenAITranscriber:
         terms = _clean_terms(terms)
         files = {"file": ("utterance.wav", wav_bytes(audio, sample_rate), "audio/wav")}
         try:
-            r = await self._client.post(API_URL, headers={"Authorization": f"Bearer {self.api_key}"},
+            r = await self._client.post(api_url(), headers={"Authorization": f"Bearer {self.api_key}"},
                                         data=self._form(terms, prompt), files=files, timeout=self.timeout)
         except Exception as exc:
             raise AssistError(describe_error(exc)) from exc
